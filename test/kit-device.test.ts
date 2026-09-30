@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { outPath, renderPage } from "../src/render/render.js";
 import { makeCaptures } from "./captures.js";
-import { compareBaseline, tmpWorkspace, withRenderer } from "./helpers.js";
+import { compareBaseline, pixel, tmpWorkspace, withRenderer } from "./helpers.js";
 
 let ws: string;
 beforeAll(async () => {
@@ -28,6 +28,18 @@ describe("device", () => {
     expect(sidecar.devices[0]).toMatchObject({ statusBar: "included", repaint: false, screen: [1170, 2532] });
     const repainted = await render("device-repaint", "iphone-6.9");
     expect(repainted.sidecar.devices[0]).toMatchObject({ statusBar: "included", repaint: true, screen: [1170, 2532] });
+  });
+
+  it("draws the dynamic island only when repaint is on", async () => {
+    // Island centre in capture px is (585, 88). Device at x=180, y=260, width=900 shows the 1170 px capture at k = 900/1170;
+    // the render is scaled by 1290/1260.
+    const k = 900 / 1170, sc = 1290 / 1260;
+    const px = Math.round((180 + 585 * k) * sc), py = Math.round((260 + 88 * k) * sc);
+    const sum = (c: number[]) => c[0] + c[1] + c[2];
+    const plain = await render("device", "iphone-6.9");
+    const repainted = await render("device-repaint", "iphone-6.9");
+    expect(sum(await pixel(repainted.out, px, py))).toBeLessThan(40);
+    expect(sum(await pixel(plain.out, px, py))).toBeGreaterThan(60);
   });
 
   it("warns when a capture falls back to another locale", async () => {

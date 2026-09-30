@@ -34,6 +34,9 @@ function probe(img: HTMLImageElement) {
   };
 }
 
+const fontSpec = (weight: number, size: number, family: string) =>
+  `${weight} ${size}px ${family === "sans-serif" ? family : `"${family}"`}`;
+
 function drawStatusBar(x: CanvasRenderingContext2D, kind: Kind, w: number, u: number, ink: string, family: string) {
   const Wp = w / u;
   x.fillStyle = ink; x.strokeStyle = ink; x.lineCap = "round";
@@ -49,7 +52,7 @@ function drawStatusBar(x: CanvasRenderingContext2D, kind: Kind, w: number, u: nu
     x.beginPath(); x.roundRect(bx + bh * 0.17, by - bh * 0.33, bw - bh * 0.34, bh * 0.66, bh * 0.18); x.fill();
   };
   if (kind === "iphone") {
-    x.font = `600 ${17 * u}px "${family}"`; x.textBaseline = "middle"; x.textAlign = "center";
+    x.font = fontSpec(600, 17 * u, family); x.textBaseline = "middle"; x.textAlign = "center";
     x.fillText("9:41", Wp * 0.177 * u, 30.5 * u);
     x.fillStyle = "#000"; x.beginPath(); x.roundRect(w / 2 - 63 * u, 11 * u, 126 * u, 37 * u, 18.5 * u); x.fill();
     x.fillStyle = ink;
@@ -58,14 +61,14 @@ function drawStatusBar(x: CanvasRenderingContext2D, kind: Kind, w: number, u: nu
     wifi((Wp - 78) * u, by + 5 * u, 11.2 * u, 2.1 * u);
     battery((Wp - 60) * u, by, 25 * u, 12 * u);
   } else if (kind === "ipad") {
-    x.font = `600 ${13 * u}px "${family}"`; x.textBaseline = "middle"; x.textAlign = "left";
+    x.font = fontSpec(600, 13 * u, family); x.textBaseline = "middle"; x.textAlign = "left";
     x.fillText("9:41", 20 * u, 12.5 * u);
-    x.font = `500 ${13 * u}px "${family}"`; x.fillText("Wed Sep 9", 20 * u + x.measureText("9:41 ").width + 4 * u, 12.5 * u);
+    x.font = fontSpec(500, 13 * u, family); x.fillText("Wed Sep 9", 20 * u + x.measureText("9:41 ").width + 4 * u, 12.5 * u);
     wifi(w - 72 * u, 16 * u, 9 * u, 1.8 * u);
     battery(w - 50 * u, 12.5 * u, 22 * u, 10.5 * u);
   } else {
     const mid = SPEC[kind].top * u / 2, rx = w - 20 * u;
-    x.font = `500 ${14 * u}px "${family}"`; x.textBaseline = "middle"; x.textAlign = "left";
+    x.font = fontSpec(500, 14 * u, family); x.textBaseline = "middle"; x.textAlign = "left";
     x.fillText("9:41", 20 * u, mid);
     if (kind === "android") { x.fillStyle = "#050505"; x.beginPath(); x.arc(w / 2, mid, 5.5 * u, 0, Math.PI * 2); x.fill(); x.fillStyle = ink; }
     x.beginPath(); x.roundRect(rx - 7 * u, mid - 6.5 * u, 7 * u, 13 * u, 1.6 * u); x.fill();
