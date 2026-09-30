@@ -131,6 +131,17 @@ describe("renderer", () => {
     }, { timeoutMs: 5000 });
   });
 
+  it("fails a video page that sets __ready without __seek at once, not after the timeout", async () => {
+    const ws = tmpWorkspace("basic");
+    await withRenderer(ws, async (r) => {
+      const started = Date.now();
+      await expect(renderVideo(r, { page: "plain", target: "android-phone", locale: "en", out: `${ws}/out/plain.mp4` }, { fps: 2, duration: 1 }))
+        .rejects.toThrow(/plain \(android-phone, en\) set window\.__ready but does not define window\.__seek/);
+      expect(Date.now() - started).toBeLessThan(20000);
+      expect(fs.existsSync(`${ws}/out/plain.mp4`)).toBe(false);
+    }, { timeoutMs: 60000 });
+  });
+
   it("fails a video whose __seek never resolves and stops ffmpeg", async () => {
     const ws = tmpWorkspace("basic");
     const out = `${ws}/out/stuck-seek.mp4`;

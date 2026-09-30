@@ -390,7 +390,14 @@ export async function renderVideo(r: Renderer, job: RenderJob, opts: { fps: numb
   let done: Promise<number> = Promise.resolve(0);
   let exited = false;
   try {
-    await waitForPage(r, opened, () => typeof (window as any).__seek === "function" || typeof (window as any).__shotsmithError === "string", "define window.__seek", label, logs);
+    // A page that reaches ready() without __seek is not a video page: fail then instead of waiting the full timeout.
+    await waitForPage(r, opened, () => typeof (window as any).__seek === "function" || (window as any).__ready === true || typeof (window as any).__shotsmithError === "string", "define window.__seek", label, logs);
+    const hasSeek = () => typeof (window as any).__seek === "function";
+    if (!(await bounded(r, tab.evaluate(hasSeek)))) {
+      // Allow a page that defines __seek just after ready() a moment to do so.
+      const late = await bounded(r, tab.waitForFunction(hasSeek, null, { timeout: 1000 })).then(() => true, (e) => { if (e instanceof PageStuck) throw e; return false; });
+      if (!late) throw new RenderError(`${label} set window.__ready but does not define window.__seek; a video page must set window.__seek = async (seconds) => { ...draw that moment... }`, logs);
+    }
     fs.mkdirSync(path.dirname(job.out), { recursive: true });
     const proc = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(opts.fps), "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", job.out]);
     ff = proc;
