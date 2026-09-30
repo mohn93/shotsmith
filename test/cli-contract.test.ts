@@ -66,6 +66,24 @@ describe("cli contract", () => {
     expect(run(["--version"]).code).toBe(0);
   });
 
+  it("prints --version and --help as one JSON object under --json, with exit 0", () => {
+    const version = JSON.parse(fs.readFileSync(`${ROOT}/package.json`, "utf8")).version;
+    const v = run(["--version", "--json"]);
+    expect(v.code).toBe(0);
+    expect(v.out.trim().split("\n")).toHaveLength(1);
+    expect(JSON.parse(v.out)).toEqual({ ok: true, version });
+    for (const args of [["--help", "--json"], ["build", "--help", "--json"], ["render", "--json", "--help"]]) {
+      const r = run(args);
+      expect(r.code, args.join(" ")).toBe(0);
+      expect(r.out.trim().split("\n"), args.join(" ")).toHaveLength(1);
+      expect(JSON.parse(r.out), args.join(" ")).toEqual({ ok: true, help: expect.stringMatching(/^Usage: shotsmith/) });
+    }
+    expect(JSON.parse(run(["build", "--help", "--json"]).out).help).toMatch(/Usage: shotsmith build/);
+    // Without --json the text is printed as usual.
+    expect(run(["--version"]).out.trim()).toBe(version);
+    expect(run(["build", "--help"]).out).toMatch(/^Usage: shotsmith build/);
+  });
+
   it("rejects bad thumbs and strip arguments with exit 2 and writes nothing", () => {
     const ws = tmpWorkspace("basic");
     const t = "android-phone";
