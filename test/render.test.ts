@@ -240,6 +240,28 @@ describe("renderer", () => {
     });
   });
 
+  it("identifies a served font by the names inside it, however its URL is spelled or fetched", async () => {
+    const ws = tmpWorkspace("kit");
+    const load = (src: string) => `new FontFace("F", "url(" + ${src} + ")").load()`;
+    const variants: Record<string, string> = {
+      encoded: load(`"/pages/..%2Ffonts/Inter-Bold.ttf"`),
+      dotdot: load(`"/pages/../fonts/Inter-Bold.ttf"`),
+      localhost: load(`"http://localhost:" + location.port + "/fonts/Inter-Bold.ttf"`),
+      fetched: `fetch("/fonts/Inter-Bold.ttf").then((r) => r.arrayBuffer()).then((b) => new FontFace("F", b).load())`,
+    };
+    if (fs.existsSync(`${ws}/FONTS/Inter-Bold.ttf`)) variants.cased = load(`"/Fonts/INTER-bold.ttf"`);
+    for (const [name, js] of Object.entries(variants)) {
+      fs.writeFileSync(`${ws}/pages/${name}.html`, `<!doctype html><body><script>${js}.catch(() => {}).finally(() => { window.__ready = true; });</script></body></html>`);
+    }
+    await withRenderer(ws, async (r) => {
+      for (const name of Object.keys(variants)) {
+        const { sidecar } = await renderPage(r, { page: name, target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", name) });
+        expect(sidecar.requests.fonts, name).toEqual(["/fonts/Inter-Bold.ttf"]);
+        expect(sidecar.servedFonts, name).toEqual([{ url: "/fonts/Inter-Bold.ttf", names: ["Inter", "Inter Bold", "Inter-Bold"], appleOnly: false }]);
+      }
+    });
+  });
+
   it("records a capture reached through a symlink into inputs", async () => {
     const ws = tmpWorkspace("basic");
     fs.mkdirSync(`${ws}/inputs/iphone/en`, { recursive: true });

@@ -33,4 +33,4 @@ export function isAcceptedAppleSize(platform: "iphone" | "ipad", w: number, h: n
 }
 
 // SF and New York are licensed for Apple-platform mockups only. Matches a family, full or PostScript name.
-export const isAppleOnlyFontName = (name: string): boolean => /^(\.?SF|New ?York)/i.test(name);
+export const isAppleOnlyFontName = (name: string): boolean => /^\.?(SF|New ?York)/i.test(name);

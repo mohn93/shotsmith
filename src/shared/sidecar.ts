@@ -3,6 +3,8 @@ export interface SidecarText {
   overflow: boolean; clipped: boolean; safeArea: boolean; shrink: number | null; covered: boolean; fallbackFonts: string[];
   // Code points (U+XXXX) no face of the configured font has a glyph for; Chromium draws them as tofu or with a system font.
   missingGlyphs?: string[];
+  // Family and PostScript names of every font Chromium drew the text with, web fonts included (renderer).
+  usedFonts?: string[];
 }
 export interface SidecarFont { family: string; weight: string; url: string; status: "loaded" | "unloaded" }
 export interface SidecarDevice { platform: string; capture: string; statusBar: "included" | "none"; repaint: boolean; screen: [number, number] }
@@ -25,12 +27,16 @@ export interface KitSidecar {
   texts: SidecarText[]; fonts: SidecarFont[]; captures: string[]; devices: SidecarDevice[]; lifts: number; warnings: string[];
   generated: SidecarGenerated[]; claimsShown: SidecarClaimShown[];
 }
+// A font file the page requested, identified by the names inside it (renderer). names is empty when the file could not
+// be found or read.
+export interface SidecarServedFont { url: string; names: string[]; appleOnly: boolean }
 // The renderer adds what the page cannot report about itself.
 export interface Sidecar extends KitSidecar {
   // URL paths the page requested under /inputs/, and every font request.
   requests: { captures: string[]; fonts: string[] };
   // The page's DOM changed between ready() and the screenshot.
   changedAfterReady: boolean;
+  servedFonts: SidecarServedFont[];
 }
 
 // The sidecar sits next to its image as <name>.sidecar.json, so it never collides with a workspace file like claims.json.
@@ -59,5 +65,5 @@ export function domHash(text: string): string {
 
 export const emptySidecar = (page: string, target: string, locale: string, warning: string): Sidecar => ({
   page, target, locale, kit: false, texts: [], fonts: [], captures: [], devices: [], lifts: 0, warnings: [warning],
-  generated: [], claimsShown: [], requests: { captures: [], fonts: [] }, changedAfterReady: false,
+  generated: [], claimsShown: [], requests: { captures: [], fonts: [] }, changedAfterReady: false, servedFonts: [],
 });

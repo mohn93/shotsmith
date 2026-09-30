@@ -41,7 +41,7 @@ describe("kit core", () => {
       await ready();</script></body></html>`);
     const { sidecar } = await render(ws, "fake", "iphone-6.9", "en");
     const mismatch = checkClaims(loadConfig(ws), loadClaims(ws), [sidecar]).filter((f) => f.rule === "claims.mismatch");
-    expect(mismatch.map((f) => f.message).sort()).toEqual([expect.stringMatching(/^"Invented copy"/), expect.stringMatching(/^"Rated #1"/)]);
+    expect(mismatch.map((f) => f.message).sort()).toEqual([expect.stringMatching(/shows "Fresh ideas for your table\. Rated #1"/), expect.stringMatching(/shows "Invented copy"/)]);
     expect(mismatch.every((f) => f.severity === "error")).toBe(true);
   });
 

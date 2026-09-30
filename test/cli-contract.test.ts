@@ -7,8 +7,8 @@ import { loadConfig } from "../src/config/schema.js";
 import { outPath } from "../src/render/render.js";
 import { ROOT, tempDir, tmpWorkspace } from "./helpers.js";
 
-const run = (args: string[], cwd = ROOT) => {
-  const r = spawnSync("node", [`${ROOT}/dist/cli.js`, ...args], { encoding: "utf8", cwd });
+const run = (args: string[], cwd = ROOT, env: NodeJS.ProcessEnv = process.env) => {
+  const r = spawnSync("node", [`${ROOT}/dist/cli.js`, ...args], { encoding: "utf8", cwd, env });
   return { code: r.status as number, out: r.stdout, err: r.stderr };
 };
 
@@ -91,12 +91,13 @@ describe("cli contract", () => {
 
   it("rejects bad render options before starting Chromium", () => {
     const ws = tmpWorkspace("basic");
+    // With no browsers installed, any launch fails loudly with its own message, so an option error proves no launch.
+    const env = { ...process.env, PLAYWRIGHT_BROWSERS_PATH: tempDir("contract-no-browsers-") };
+    expect(JSON.parse(run(["render", "plain", "--json", "-C", ws], ROOT, env).out).error.message).toMatch(/Chromium for Playwright is not installed/);
     for (const args of [["--fps", "abc"], ["--fps", "0"], ["--fps", "121"], ["--duration", "0"], ["--duration", "61"], ["--duration", "x"]]) {
-      const started = Date.now();
-      const r = run(["render", "plain", ...args, "--json", "-C", ws]);
+      const r = run(["render", "plain", ...args, "--json", "-C", ws], ROOT, env);
       expect(r.code, args.join(" ")).toBe(2);
       expect(JSON.parse(r.out).error.message).toMatch(new RegExp(args[0]));
-      expect(Date.now() - started, args.join(" ")).toBeLessThan(3000);
     }
     expect(fs.existsSync(`${ws}/out`)).toBe(false);
   });

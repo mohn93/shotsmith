@@ -115,7 +115,7 @@ describe("Apple helpers", () => {
   });
 
   it("recognises Apple-only font names", () => {
-    for (const n of ["SF Pro", "SFArabic", ".SFNS-Regular", "New York", "NewYork-Bold", "new york medium", "SF-Compact-Display-Bold"]) expect(isAppleOnlyFontName(n), n).toBe(true);
+    for (const n of ["SF Pro", "SFArabic", ".SFNS-Regular", "New York", "NewYork-Bold", "new york medium", "SF-Compact-Display-Bold", ".New York", ".NewYork-Regular"]) expect(isAppleOnlyFontName(n), n).toBe(true);
     for (const n of ["Inter", "Roboto", "Noto Sans", "Helvetica Neue"]) expect(isAppleOnlyFontName(n), n).toBe(false);
   });
 });

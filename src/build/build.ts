@@ -4,7 +4,7 @@ import { checkClaims } from "../checks/claims.js";
 import { type Finding, type Where, err, formatFinding } from "../checks/findings.js";
 import { checkInputs } from "../checks/inputs.js";
 import { checkSidecars, loadSidecars } from "../checks/sidecars.js";
-import { checkExports, exportPath } from "../checks/store.js";
+import { checkExports, exportPath, staleOutputs } from "../checks/store.js";
 import { loadClaims } from "../config/claims.js";
 import type { ResolvedConfig } from "../config/schema.js";
 import { type RenderJob, type RenderResult, openRenderer, outPath, renderPage } from "../render/render.js";
@@ -13,6 +13,8 @@ import { contactSheet, encodeJpeg } from "./export.js";
 
 export interface BuildOptions { targets?: string[]; locales?: string[]; jobs?: number }
 export interface BuildResult { rendered: RenderResult[]; failures: { job: RenderJob; error: string }[]; findings: Finding[]; report: string }
+
+const lstatOrNull = (p: string): fs.Stats | null => { try { return fs.lstatSync(p); } catch { return null; } };
 
 export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<BuildResult> {
   const unknownTargets = (o.targets ?? []).filter((n) => !cfg.targets.some((t) => t.name === n));
@@ -38,23 +40,31 @@ export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<
     await r.close();
   }
 
+  // Stale image files anywhere in the output folder go; folders and other files are only reported by checkExports.
+  for (const f of staleOutputs(cfg).images) fs.rmSync(f);
   for (const l of locales) for (const t of targets) {
-    const dir = path.dirname(exportPath(cfg, l.code, t.name, "x"));
-    if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) if (/\.(jpe?g|png)$/i.test(f) && !cfg.pages.includes(f.replace(/\.[^.]+$/, ""))) fs.rmSync(path.join(dir, f));
     const pngs: string[] = [];
     for (const page of cfg.pages) {
-      const png = outPath(cfg, l.code, t.name, page);
+      const png = outPath(cfg, l.code, t.name, page), jpg = exportPath(cfg, l.code, t.name, page);
+      const kind = lstatOrNull(jpg);
+      // A folder in the way is reported as stale; the export is then missing.
+      if (kind?.isDirectory()) continue;
+      // Never write through a link to somewhere else.
+      if (kind && !kind.isFile()) fs.unlinkSync(jpg);
       if (!rendered.some((x) => x.out === png)) {
         // The page failed to render; drop its old export so check reports it missing.
-        if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) if (/\.(jpe?g|png)$/i.test(f) && f.replace(/\.[^.]+$/, "") === page) fs.rmSync(path.join(dir, f));
+        if (kind?.isFile()) fs.rmSync(jpg);
         continue;
       }
-      await encodeJpeg(png, exportPath(cfg, l.code, t.name, page));
+      await encodeJpeg(png, jpg);
       pngs.push(png);
     }
     const sheet = path.join(cfg.root, cfg.output, "contact-sheets", `${l.code}-${t.name}.jpg`);
+    const sheetKind = lstatOrNull(sheet);
+    if (sheetKind?.isDirectory()) continue;
+    if (sheetKind && !sheetKind.isFile()) fs.unlinkSync(sheet);
     if (pngs.length) await contactSheet(pngs, sheet);
-    else fs.rmSync(sheet, { force: true });
+    else if (sheetKind?.isFile()) fs.rmSync(sheet);
   }
 
   const scope = (f: Where) => (!f.locale || locales.some((l) => l.code === f.locale)) && (!f.target || targets.some((t) => t.name === f.target));

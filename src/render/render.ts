@@ -1,17 +1,19 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import * as fontkit from "fontkit";
 import { type Browser, type Page, errors } from "playwright";
 import { loadClaims } from "../config/claims.js";
 import { type ResolvedConfig, loadConfig } from "../config/schema.js";
+import { isAppleOnlyFontName } from "../config/targets.js";
 import { kitDir } from "../shared/paths.js";
 import type { KitContext } from "../shared/context.js";
 import { installPatches } from "../shared/patches.js";
-import { type KitSidecar, type Sidecar, type SidecarGenerated, domHash, emptySidecar, pageText, sidecarPath } from "../shared/sidecar.js";
+import { type KitSidecar, type Sidecar, type SidecarGenerated, type SidecarServedFont, domHash, emptySidecar, pageText, sidecarPath } from "../shared/sidecar.js";
 import { launch } from "./browser.js";
 import { buildContext } from "./context.js";
-import { type GlyphCache, fontFileForUrl, openGlyphSources } from "./fonts.js";
-import { type RenderServer, startServer } from "./server.js";
+import { type GlyphCache, findSysFont, fontFileForUrl, openGlyphSources } from "./fonts.js";
+import { type RenderServer, resolveInside, startServer } from "./server.js";
 
 export interface Renderer { cfg: ResolvedConfig; browser: Browser; server: RenderServer; timeoutMs: number; close(): Promise<void> }
 export interface RenderJob { page: string; target: string; locale: string; out: string }
@@ -127,17 +129,58 @@ function captureOf(root: string, pathname: string): string | null {
   return canonical(path.join(root, diskCase(root, [top])[0]), rest);
 }
 
-function recordRequest(requests: Sidecar["requests"], hosts: Set<string>, root: string, url: string, font: boolean): void {
-  let where = url, capture: string | null = null;
+const FONT_FILE = /\.(otf|ttf|ttc|woff2?)$/i;
+
+// A same-server font request named as the server resolves it: /sysfont/<file>, or the workspace path with its on-disk
+// spelling, so /pages/..%2Ffonts/x.ttf, /Fonts/x.ttf and the localhost host name all name /fonts/x.ttf.
+function fontPathOf(root: string, pathname: string): string {
+  if (pathname.startsWith("/sysfont/") || pathname.startsWith("/__shotsmith/")) return pathname;
+  const rel = path.relative(root, path.resolve(root, "." + pathname));
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return pathname;
+  return "/" + diskCase(root, rel.split(path.sep)).join("/");
+}
+
+function recordRequest(requests: Sidecar["requests"], hosts: Set<string>, root: string, url: string, fontType: boolean): void {
+  let where = url, capture: string | null = null, font = fontType;
   try {
     const u = new URL(url);
     if ((u.protocol === "http:") && hosts.has(u.host)) {
-      where = decodeURIComponent(u.pathname);
-      capture = captureOf(root, where);
+      const pathname = decodeURIComponent(u.pathname);
+      capture = captureOf(root, pathname);
+      // A font file fetched some other way (fetch() into new FontFace) is still a font.
+      font ||= pathname.startsWith("/sysfont/") || FONT_FILE.test(pathname);
+      where = font ? fontPathOf(root, pathname) : pathname;
     }
   } catch { /* keep the raw URL */ }
   if (capture && !requests.captures.includes(capture)) requests.captures.push(capture);
   if (font && !requests.fonts.includes(where)) requests.fonts.push(where);
+}
+
+// The file a recorded font request was served from, found the way server.ts finds it; null for other hosts.
+function servedFontFile(root: string, url: string): string | null {
+  if (!url.startsWith("/") || url.startsWith("/__shotsmith/")) return null;
+  if (url.startsWith("/sysfont/")) return findSysFont(url.slice("/sysfont/".length));
+  return resolveInside(root, "." + url);
+}
+
+// Family, full and PostScript names of every font in a file (a collection has several).
+function fontNames(file: string): string[] {
+  try {
+    const f = fontkit.openSync(file);
+    const names = ("fonts" in f ? f.fonts : [f]).flatMap((x) => [x.familyName, x.fullName, x.postscriptName]);
+    return [...new Set(names.filter((n): n is string => typeof n === "string" && n !== ""))];
+  } catch {
+    return [];
+  }
+}
+
+// Identifies every font the page requested by the names inside the file, whatever the file or URL is called.
+function servedFonts(root: string, urls: string[]): SidecarServedFont[] {
+  return urls.map((url) => {
+    const file = servedFontFile(root, url);
+    const names = file ? fontNames(file) : [];
+    return { url, names, appleOnly: names.some(isAppleOnlyFontName) };
+  });
 }
 
 async function openPage(r: Renderer, job: RenderJob, label: string, logs: string[]): Promise<OpenedPage> {
@@ -223,7 +266,9 @@ async function applyCoverage(tab: Page, sidecar: Sidecar, fonts: KitContext["fon
     const el = Number(attributes[attributes.indexOf("data-sx") + 1]);
     const { fonts: used } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
     const system = used.filter((f) => !f.isCustomFont).map((f) => f.familyName);
-    for (const t of sidecar.texts) if (t.el === el) { t.covered = system.length === 0; t.fallbackFonts = system; }
+    // Web fonts report the names inside the file, so an Apple-only font is seen however it was loaded (data: URL too).
+    const names = [...new Set(used.flatMap((f) => [f.familyName, f.postScriptName ?? ""]).filter(Boolean))];
+    for (const t of sidecar.texts) if (t.el === el) { t.covered = system.length === 0; t.fallbackFonts = system; t.usedFonts = names; }
   }
   await cdp.detach();
 
@@ -306,8 +351,9 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
     ] as const)) as [KitSidecar | null, string | null];
     const text = await bounded(r, tab.evaluate(pageText));
     const sidecar: Sidecar = raw
-      ? { ...raw, page: job.page, target: job.target, locale: job.locale, kit: true, requests: opened.requests, changedAfterReady: readyHash !== null && readyHash !== domHash(text) }
+      ? { ...raw, page: job.page, target: job.target, locale: job.locale, kit: true, requests: opened.requests, changedAfterReady: readyHash !== null && readyHash !== domHash(text), servedFonts: [] }
       : { ...emptySidecar(job.page, job.target, job.locale, "kit.unused: page did not use the kit; its text and fonts were not checked"), requests: opened.requests };
+    sidecar.servedFonts = servedFonts(path.resolve(r.cfg.root), opened.requests.fonts);
     if (raw) sidecar.generated = [...sidecar.generated, ...await bounded(r, closedShadowRoots(tab))];
     if (sidecar.texts.length) {
       const c = buildContext(loadConfig(r.cfg.root), loadClaims(r.cfg.root), job.target, job.locale, job.page);

@@ -78,7 +78,7 @@ function realOrNull(p: string): string | null {
 // Resolves a request under base to a real file, or null. The real path (symlinks followed) must stay inside
 // realpath(base), so a link to /etc, or to another folder, is refused. A path under base/node_modules may instead
 // leave through links as long as it stays inside realpath(base/node_modules), so linked and pnpm installs work.
-function resolveInside(base: string, rel: string): string | null {
+export function resolveInside(base: string, rel: string): string | null {
   const f = path.resolve(base, rel);
   if (!inside(base, f)) return null;
   const real = realOrNull(f);
