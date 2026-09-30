@@ -21,7 +21,8 @@ const base = {
 const files = ["fonts/Inter-Bold.ttf", "inputs/iphone/en/home.png", "inputs/iphone/en/map.png", "inputs/iphone/de/home.png", "inputs/android-phone/home.png"];
 const claims = { h: { source: "s", text: { en: "Hello", de: "Hallo" } } };
 
-afterEach(() => { delete process.env.FONT_DIRS; });
+const prevFontDirs = process.env.FONT_DIRS;
+afterEach(() => { process.env.FONT_DIRS = prevFontDirs; });
 
 describe("buildContext", () => {
   it("uses the sysfont when installed", () => {
@@ -43,6 +44,7 @@ describe("buildContext", () => {
   });
 
   it("resolves captures per platform and locale", () => {
+    process.env.FONT_DIRS = fs.mkdtempSync(path.join(os.tmpdir(), "nofonts-"));
     const ctx = buildContext(loadConfig(ws(base, files)), claims, "iphone-6.9", "de", "p");
     expect(ctx.captures.files.home).toEqual({ url: "/inputs/iphone/de/home.png", fallback: false });
     expect(ctx.captures.files.map).toEqual({ url: "/inputs/iphone/en/map.png", fallback: true });
@@ -55,9 +57,52 @@ describe("buildContext", () => {
   });
 
   it("defaults target and locale, and rejects unknown ones", () => {
+    process.env.FONT_DIRS = fs.mkdtempSync(path.join(os.tmpdir(), "nofonts-"));
     const cfg = loadConfig(ws(base, files));
     expect(buildContext(cfg, claims, "", "", "p").target.name).toBe("iphone-6.9");
     expect(() => buildContext(cfg, claims, "ipad-13", "en", "p")).toThrow(/ipad-13/);
     expect(() => buildContext(cfg, claims, "iphone-6.9", "fr", "p")).toThrow(/fr/);
+  });
+
+  it("throws when a sysfont fallback is also missing", () => {
+    process.env.FONT_DIRS = fs.mkdtempSync(path.join(os.tmpdir(), "nofonts-"));
+    const config = {
+      ...base,
+      fonts: { display: { apple: "sysfont:SF-Pro-Display-Bold.otf", play: "fonts/Inter-Bold.ttf", fallback: "sysfont:Another-Missing.otf" } },
+    };
+    expect(() => buildContext(loadConfig(ws(config, files)), claims, "iphone-6.9", "en", "p")).toThrow(/is not installed either/);
+  });
+
+  it("throws when a sysfont is missing and no fallback is set", () => {
+    process.env.FONT_DIRS = fs.mkdtempSync(path.join(os.tmpdir(), "nofonts-"));
+    const config = {
+      ...base,
+      fonts: { display: { apple: "sysfont:SF-Pro-Display-Bold.otf", play: "fonts/Inter-Bold.ttf" } },
+    };
+    expect(() => buildContext(loadConfig(ws(config, files)), claims, "iphone-6.9", "en", "p")).toThrow(/fallback is not set/);
+  });
+
+  it("throws when a workspace font path does not exist", () => {
+    process.env.FONT_DIRS = fs.mkdtempSync(path.join(os.tmpdir(), "nofonts-"));
+    const config = {
+      app: "A", pages: ["p"], targets: ["android-phone"],
+      locales: [{ code: "en" }],
+      fonts: { display: { play: "fonts/Missing-Font.ttf", fallback: "fonts/Inter-Bold.ttf" } },
+      captures: {},
+    };
+    expect(() => buildContext(loadConfig(ws(config, files)), claims, "android-phone", "en", "p")).toThrow(/Font file not found/);
+  });
+
+  it("locale font override wins over store font", () => {
+    process.env.FONT_DIRS = fs.mkdtempSync(path.join(os.tmpdir(), "nofonts-"));
+    const config = {
+      app: "A", pages: ["p"], targets: ["iphone-6.9"],
+      locales: [{ code: "en", fonts: { display: "fonts/Inter-Bold.ttf" } }],
+      fonts: { display: { apple: "sysfont:SF-Pro-Display-Bold.otf", fallback: "fonts/Inter-Bold.ttf" } },
+      captures: { iphone: { statusBar: "included" } },
+    };
+    const ctx = buildContext(loadConfig(ws(config, files)), claims, "iphone-6.9", "en", "p");
+    expect(ctx.fonts.display.faces[0].url).toBe("/fonts/Inter-Bold.ttf");
+    expect(ctx.warnings).toEqual([]);
   });
 });

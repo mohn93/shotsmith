@@ -44,6 +44,7 @@ export function buildContext(cfg: ResolvedConfig, claims: Claims, targetName: st
     if (resolved.missing.length) {
       if (!r.fallback) throw new Error(`Font ${resolved.missing.join(", ")} is not installed and fonts.${role}.fallback is not set`);
       const fb = faces(cfg.root, r.fallback);
+      if (fb.missing.length) throw new Error(`Font ${resolved.missing.join(", ")} is not installed and the fallback ${typeof r.fallback === "string" ? r.fallback : "fonts"} ${fb.missing.join(", ")} is not installed either`);
       warnings.push(`font.fallback: ${resolved.missing.join(", ")} is not installed; using ${typeof r.fallback === "string" ? r.fallback : "the fallback set"}`);
       resolved = fb;
     }
