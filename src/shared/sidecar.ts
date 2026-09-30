@@ -41,11 +41,14 @@ export interface Sidecar extends KitSidecar {
 // The sidecar sits next to its image as <name>.sidecar.json, so it never collides with a workspace file like claims.json.
 export const sidecarPath = (pngPath: string): string => pngPath.replace(/\.png$/, "") + ".sidecar.json";
 
-// The page's text: document.body plus open shadow roots. Self-contained, so the renderer can run it in the page.
+// The page's text: document.body plus open shadow roots, without the source text of script, style, template and
+// noscript elements (never shown). Self-contained, so the renderer can run it in the page.
 export function pageText(): string {
   const parts: string[] = [];
+  const skip = new Set(["script", "style", "template", "noscript"]);
   const walk = (n: Node): void => {
     if (n.nodeType === Node.TEXT_NODE) parts.push(n.nodeValue ?? "");
+    if (n.nodeType === Node.ELEMENT_NODE && skip.has((n as Element).localName)) return;
     const shadow = (n as Element).shadowRoot;
     if (shadow) walk(shadow);
     for (let c = n.firstChild; c; c = c.nextSibling) walk(c);

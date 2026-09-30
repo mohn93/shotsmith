@@ -194,7 +194,20 @@ describe("renderer", () => {
       s.root.append(p);
       await ready();
       p.style.color = "red";
-      p.className = "late";</script></body></html>`);
+      p.className = "late";
+      // Source text that is never shown is not page text either.
+      const st = document.createElement("style");
+      st.textContent = ".late { letter-spacing: 1px }";
+      document.head.append(st);
+      s.root.append(Object.assign(document.createElement("style"), { textContent: "p { margin: 0 }" }));
+      s.root.append(Object.assign(document.createElement("template"), { innerHTML: "<p>Later</p>" }));
+      const ns = document.createElement("noscript");
+      ns.textContent = "No script";
+      s.root.append(ns);
+      const sc = document.createElement("script");
+      sc.type = "text/plain";
+      sc.textContent = "notes";
+      s.root.append(sc);</script></body></html>`);
     const styled = await withRenderer(ws, (r) => renderPage(r, { page: "late-style", target: "iphone-6.9", locale: "en", out: outPath(r.cfg, "en", "iphone-6.9", "late-style") }));
     expect(styled.sidecar.kit).toBe(true);
     expect(styled.sidecar.changedAfterReady).toBe(false);
