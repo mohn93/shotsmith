@@ -1,0 +1,12 @@
+{
+  "app": "{{app}}",
+  "pages": ["01-opener"],
+  "targets": ["iphone-6.9"],
+  "locales": [{ "code": "en", "apple": "en-US", "play": "en-US" }],
+  "fonts": {
+    "display": { "apple": "sysfont:SF-Pro-Display-Bold.otf", "play": "fonts/Inter-Bold.ttf", "fallback": "fonts/Inter-Bold.ttf" },
+    "text": { "apple": "sysfont:SF-Pro-Text-Regular.otf", "play": "fonts/Inter-Regular.ttf", "fallback": "fonts/Inter-Regular.ttf" }
+  },
+  "captures": { "iphone": { "statusBar": "included" } },
+  "output": "export"
+}

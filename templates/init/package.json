@@ -1,0 +1,7 @@
+{
+  "name": "store-screenshots",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "shotsmith build", "check": "shotsmith check" },
+  "dependencies": { "shotsmith": "^{{version}}" }
+}
