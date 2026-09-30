@@ -4,7 +4,8 @@ import type { SidecarClaimShown, SidecarGenerated, SidecarText } from "../shared
 // other way (generated), and what each claim element visibly shows.
 
 type Box = [number, number, number, number];
-interface Rect { l: number; t: number; r: number; b: number }
+// A clip region: its bounding rectangle, and for circle() and ellipse() the ellipse itself.
+interface Rect { l: number; t: number; r: number; b: number; ellipse?: { cx: number; cy: number; rx: number; ry: number } }
 
 const EMPTY: Box = [0, 0, 0, 0];
 const boxOf = (r: DOMRect): Box => [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
@@ -71,6 +72,15 @@ const visibleEl = (el: Element) => el.checkVisibility({ visibilityProperty: true
 const styleOwner = (t: Text): Element | null =>
   t.parentElement ?? (t.parentNode instanceof ShadowRoot ? t.parentNode.host : null);
 
+// A display: contents element has no box, so checkVisibility is false for it: judge its text by the nearest ancestor
+// that has a box, and by its own visibility (inherited by the text; opacity does not apply without a box).
+function textOwnerVisible(el: Element): boolean {
+  if (getComputedStyle(el).display !== "contents") return visibleEl(el);
+  let a = parentOf(el);
+  while (a && getComputedStyle(a).display === "contents") a = parentOf(a);
+  return !!a && a.checkVisibility({ opacityProperty: true }) && getComputedStyle(el).visibility === "visible";
+}
+
 interface TextInfo { rect: DOMRect; visible: boolean }
 const textInfos = new Map<Text, TextInfo>();
 function textInfo(t: Text): TextInfo {
@@ -81,7 +91,7 @@ function textInfo(t: Text): TextInfo {
   range.selectNodeContents(t);
   const rect = range.getBoundingClientRect();
   const visible = !!el && !!collapse(t.nodeValue ?? "") && !el.closest("script,style,template,noscript") &&
-    rect.width > 0 && rect.height > 0 && visibleEl(el) &&
+    rect.width > 0 && rect.height > 0 && textOwnerVisible(el) &&
     (el instanceof SVGElement ? svgInks(getComputedStyle(el)) : inks(getComputedStyle(el), parentOf(el)));
   const info = { rect, visible };
   textInfos.set(t, info);
@@ -142,13 +152,26 @@ function clipPathRect(value: string, a: Element, r: DOMRect): Rect {
     if (xs.some((x) => x === null) || ys.some((y) => y === null)) return UNKNOWN_CLIP;
     return { l: r.left + Math.min(...(xs as number[])), t: r.top + Math.min(...(ys as number[])), r: r.left + Math.max(...(xs as number[])), b: r.top + Math.max(...(ys as number[])) };
   }
-  m = /^(circle|ellipse)\(([^)]*) at ([^)]*)\)/.exec(v);
+  m = /^(circle|ellipse)\(([^)]*?)(?:\s*at ([^)]*))?\)/.exec(v);
   if (m) {
-    const radii = m[2].trim().split(/\s+/), [px, py] = m[3].trim().split(/\s+/);
-    const rx = /%/.test(radii[0]) ? null : length(radii[0], r.width, sx), ry = /%/.test(radii[1] ?? radii[0]) ? null : length(radii[1] ?? radii[0], r.height, sy);
-    const cx = length(px, r.width, sx), cy = length(py, r.height, sy);
-    if (rx === null || ry === null || cx === null || cy === null) return UNKNOWN_CLIP;
-    return { l: r.left + cx - rx, t: r.top + cy - ry, r: r.left + cx + rx, b: r.top + cy + ry };
+    // Local reference box size; the scale maps local px to viewport px.
+    const w = r.width / sx, h = r.height / sy;
+    const [px = "50%", py = "50%"] = (m[3] ?? "").trim().split(/\s+/).filter(Boolean);
+    const cx = length(px, w, 1), cy = length(py, h, 1);
+    if (cx === null || cy === null) return UNKNOWN_CLIP;
+    const side = (s: string | undefined, axis: "x" | "y" | "r"): number | null => {
+      const token = s ?? "closest-side";
+      const dx = [cx, w - cx], dy = [cy, h - cy];
+      const pick = token === "closest-side" ? Math.min : token === "farthest-side" ? Math.max : null;
+      if (pick) return axis === "x" ? pick(...dx) : axis === "y" ? pick(...dy) : pick(...dx, ...dy);
+      return length(token, axis === "x" ? w : axis === "y" ? h : Math.hypot(w, h) / Math.SQRT2, 1);
+    };
+    const radii = m[2].trim().split(/\s+/).filter(Boolean);
+    const rx = m[1] === "circle" ? side(radii[0], "r") : side(radii[0], "x");
+    const ry = m[1] === "circle" ? rx : side(radii[1], "y");
+    if (rx === null || ry === null) return UNKNOWN_CLIP;
+    const e = { cx: r.left + cx * sx, cy: r.top + cy * sy, rx: rx * sx, ry: ry * sy };
+    return { l: e.cx - e.rx, t: e.cy - e.ry, r: e.cx + e.rx, b: e.cy + e.ry, ellipse: e };
   }
   return UNKNOWN_CLIP;
 }
@@ -192,8 +215,15 @@ function clipsAround(el: Element, own: boolean): Rect[] {
   return out;
 }
 
-const inside = (r: DOMRect, c: Rect, sx: number, sy: number) =>
-  r.left >= c.l - sx && r.right <= c.r + sx && r.top >= c.t - sy && r.bottom <= c.b + sy;
+// Inside the clip's rectangle, and for an ellipse all four corners inside it (an ellipse is convex), with slack.
+function inside(r: DOMRect, c: Rect, sx: number, sy: number): boolean {
+  if (!(r.left >= c.l - sx && r.right <= c.r + sx && r.top >= c.t - sy && r.bottom <= c.b + sy)) return false;
+  const e = c.ellipse;
+  if (!e) return true;
+  const rx = e.rx + sx, ry = e.ry + sy;
+  return [[r.left, r.top], [r.right, r.top], [r.left, r.bottom], [r.right, r.bottom]]
+    .every(([x, y]) => ((x - e.cx) / rx) ** 2 + ((y - e.cy) / ry) ** 2 <= 1);
+}
 
 // A line-height below the font's content area (headlines use ~1.08) makes a line's box spill a few px past its
 // element. That is neither overflow nor clipping, so the vertical direction gets a quarter-em of slack.
@@ -276,10 +306,14 @@ const flatChildren = (n: Element): Node[] => {
 
 // The claim element's visible text nodes in rendering order. Line breaks and block edges become spaces; a nested claim
 // element reports its own text.
-function shownText(claimEl: Element): string {
-  const parts: string[] = [];
+function shownText(claimEl: Element): { text: string; rects: DOMRect[] } {
+  const parts: string[] = [], rects: DOMRect[] = [];
   const walk = (n: Node, top: boolean): void => {
-    if (n.nodeType === Node.TEXT_NODE) { if (textInfo(n as Text).visible) parts.push(n.nodeValue ?? ""); return; }
+    if (n.nodeType === Node.TEXT_NODE) {
+      const info = textInfo(n as Text);
+      if (info.visible) { parts.push(n.nodeValue ?? ""); rects.push(info.rect); }
+      return;
+    }
     if (!(n instanceof Element) || (!top && n.hasAttribute("data-claim")) || n.matches("script,style,template,noscript")) return;
     if (n.localName === "br") { parts.push(" "); return; }
     const d = getComputedStyle(n).display, edge = !d.startsWith("inline") && d !== "contents";
@@ -288,15 +322,18 @@ function shownText(claimEl: Element): string {
     if (edge) parts.push(" ");
   };
   walk(claimEl, true);
-  return collapse(parts.join(""));
+  return { text: collapse(parts.join("")), rects };
 }
 
-// Visible claim elements only: a hidden one shows nothing and is not evidence of anything.
+// Claim elements that show some text. A hidden claim element can still show a visible child; one that shows nothing is
+// not evidence of anything. A boxless (display: contents) element's box is the union of its shown text.
 function collectClaimsShown(): SidecarClaimShown[] {
   const out: SidecarClaimShown[] = [];
   for (const el of roots().flatMap((root) => Array.from(root.querySelectorAll<HTMLElement>("[data-claim]")))) {
+    const { text, rects } = shownText(el);
+    if (!text) continue;
     const r = el.getBoundingClientRect();
-    if (r.width > 0 && r.height > 0 && visibleEl(el)) out.push({ claim: el.dataset.claim ?? "", text: shownText(el), box: boxOf(r) });
+    out.push({ claim: el.dataset.claim ?? "", text, box: boxOf(r.width > 0 && r.height > 0 ? r : union(rects)) });
   }
   return out;
 }
@@ -413,12 +450,18 @@ async function svgTexts(url: string, depth = 0): Promise<string[] | null> {
   return out;
 }
 
-// An image that is not drawn shows its alt text instead: no src, an empty src, or one that has not loaded. An
-// <input type=image> exposes no load state, so its image is decoded again (from cache) to find out.
+// An image that is not drawn shows its alt text instead. An <img> with no source at all (no src, no usable srcset or
+// <picture> source) is complete with naturalWidth 0; one still loading is not complete. An SVG without intrinsic size
+// can also report naturalWidth 0, so that case is decoded to be sure. An <input type=image> exposes no load state, so
+// its image is decoded again (from cache) to find out.
 async function altShown(el: HTMLImageElement | HTMLInputElement): Promise<boolean> {
   if (!el.alt.trim()) return false;
+  if (el instanceof HTMLImageElement) {
+    if (!el.complete) return true;
+    if (el.naturalWidth > 0) return false;
+    return !el.currentSrc || el.decode().then(() => false, () => true);
+  }
   if (!el.getAttribute("src")) return true;
-  if (el instanceof HTMLImageElement) return !el.complete || el.naturalWidth === 0;
   const probe = new Image();
   probe.src = el.src;
   return probe.decode().then(() => false, () => true);

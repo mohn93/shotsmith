@@ -22,8 +22,9 @@ async function settle(): Promise<void> {
   await Promise.all(state.pending);
   await document.fonts.ready;
   const failed: string[] = [];
-  const imgs = Array.from(document.images).filter((i) => i.getAttribute("src"));
-  await Promise.all(imgs.map((i) => i.decode().catch(() => { failed.push(shortUrl(i.getAttribute("src")!)); })));
+  // Images with a source (src, srcset or a <picture> source) must have loaded; one with none shows its alt text.
+  const imgs = Array.from(document.images).filter((i) => i.getAttribute("src") || i.getAttribute("srcset") || i.parentElement?.localName === "picture");
+  await Promise.all(imgs.map((i) => i.decode().catch(() => { failed.push(shortUrl(i.getAttribute("src") || i.currentSrc || "an image in a <picture>")); })));
   await Promise.all(cssImageUrls().map((u) => { const i = new Image(); i.src = u; return i.decode().catch(() => { failed.push(shortUrl(u)); }); }));
   if (failed.length) throw new Error(`Image failed to load: ${[...new Set(failed)].join(", ")}`);
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));

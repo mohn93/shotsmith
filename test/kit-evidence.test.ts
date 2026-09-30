@@ -86,6 +86,11 @@ describe("kit evidence: generated text", () => {
     expect(s.generated.filter((g) => g.kind === "alt").map((g) => g.text).sort()).toEqual(["Also shown", "Free forever"]);
   });
 
+  it("records no alt text for images drawn from srcset or <picture>", async () => {
+    const s = await render("alt-srcset");
+    expect(s.generated.filter((g) => g.kind === "alt").map((g) => g.text)).toEqual(["Free forever"]);
+  });
+
   it("adds nothing for the device status bar and lift crops", async () => {
     for (const target of ["iphone-6.9", "android-phone"]) {
       const s = await render("device", target);
@@ -152,6 +157,28 @@ describe("kit evidence: visibility and clipping", () => {
       console.log(`ready() on 10,000 blocks: ${Math.round(ms)} ms`);
       expect(ms).toBeLessThan(3000);
     } finally { await tab.close(); }
+  });
+
+  it("evaluates circle(50%) clips: centred text fits, text in the corner is cut", async () => {
+    const s = await render("circle");
+    expect(s.texts.find((x) => x.text === "Free forever")).toMatchObject({ clipped: false });
+    expect(s.texts.find((x) => x.text === "Corner words")).toMatchObject({ clipped: true });
+  });
+
+  it("reports a hidden claim element whose visible child shows its text", async () => {
+    const s = await render("hidden-claim-child");
+    const long = s.texts.find((x) => x.claim === "long")!;
+    expect(long).toBeDefined();
+    expect(s.claimsShown).toContainEqual(expect.objectContaining({ claim: "long", text: long.text }));
+  });
+
+  it("traces a display:contents claim element", async () => {
+    const s = await render("contents-claim");
+    const long = s.texts.find((x) => x.claim === "long")!;
+    expect(long).toBeDefined();
+    const shown = s.claimsShown.find((x) => x.claim === "long")!;
+    expect(shown.text).toBe(long.text);
+    expect(shown.box[2]).toBeGreaterThan(0);
   });
 
   it("marks text inside an ellipsis container that overflows", async () => {
