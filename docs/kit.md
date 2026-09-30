@@ -38,18 +38,18 @@ A custom target can set `formFactor` in the config instead of relying on the rat
 
 ## Text and claims
 
-Every word on a screenshot must come from `claims.json`, and every claim needs a `source` (the store copy line or capture it comes from) and text for every configured locale.
+Every word on a screenshot must come from `claims.json`. A claim id uses letters, digits, `_`, `.` and `-` only (`^[\w.-]+$`). Every claim needs a `source` (the store copy line or capture it comes from) and text for every configured locale.
 
 - `t(id)` returns the claim's text for the current locale and throws for an unknown id.
 - `t.el(tag, id, parent?)` creates an element with that text and `data-claim="<id>"`, and appends it to `parent` when given.
 - Any element with `data-claim` is a claim element. `headline()` sets it for you.
 
-`shotsmith claims` (and `check`/`build`) require:
+`shotsmith claims` and `shotsmith build` run these rules; `shotsmith check` does not (it covers store rules, text fit, fonts and captures). They require:
 
 - Exact match per claim element: the text the element visibly shows must equal the claim text for that locale. Whitespace and line breaks are ignored; everything else must match. Text the claim element does not show, or extra text inside it, is a `claims.mismatch`.
 - Text outside any claim element is `claims.untraced`, except kit chrome (the status bar the kit draws).
-- Text that is not in the DOM as text is untraced and fails: text drawn by CSS `content` (`::before`/`::after`), list counters and markers, canvas text, text inside frames, form fields, SVG images, and the alt text browsers show for an image that does not draw. Numbered lists must put the numbers in claim text and use `list-style: none`.
-- Punctuation and symbols alone are allowed as decoration: bullets, check marks, quote marks, arrows.
+- Text that is not in the DOM as text is untraced and fails: text drawn by CSS `content` (`::before`/`::after`), list counters and markers, canvas text, text inside frames, form fields, SVG images, anything inside a closed shadow root (the checks cannot read it), and the alt text browsers show for an image that does not draw. Numbered lists must put the numbers in claim text and use `list-style: none`.
+- Decoration exemption: CSS `content` (`::before`/`::after`) and list markers that are only punctuation or symbols (bullets, check marks, quote marks, arrows) are allowed. The exemption covers nothing else. A symbol written into the DOM outside a claim element (for example `<span>✓</span>`) or drawn on a canvas is still untraced; put it in claim text, or produce it with CSS `content` or a list marker.
 - Unused claims are a warning (`claims.unused`). A page that never calls the kit fails (`kit.unused`).
 
 Two more rules the checks enforce:
@@ -86,7 +86,7 @@ Draws a phone or tablet frame around a capture, in the frame style of the target
 | --- | --- |
 | `capture` | Capture name, the file name without extension. |
 | `x`, `y` | Top-left of the screen (not the frame) in logical px. The bezel extends outside this point. |
-| `width` | Width of the screen in logical px. The height follows the capture's aspect ratio. |
+| `width` | Width of the screen in logical px. The height follows the capture's aspect ratio; with `statusBar: "none"` the kit adds a status band above and a home indicator band below, so the screen is taller than the capture. |
 | `tilt` | A number of degrees (`perspective(4000px) rotateY(deg)`), or any CSS `transform` string. |
 | `repaint` | With `statusBar: "included"`, repaint the capture's status bar band with a clean 9:41 bar. |
 | `homeIndicator` | Add the home indicator band below a capture that has none. |
@@ -101,7 +101,7 @@ Status bar modes are set per platform in the config, `captures.<platform>.status
 
 `captures.<platform>.pointWidth` gives the capture's width in points when the chrome should be scaled for it; by default iPhone captures are 3x, iPad 2x, and Android phones 411 pt wide, Android tablets 800 pt wide.
 
-Returned: `el` (the frame element), `screen`, `image`, `k` (logical px per capture px), `toStage(cx, cy)` (capture px to stage px), `toLocal(cx, cy)` (capture px to px inside the frame, used with `tilt`), `pixel(cx, cy)` (the capture's color at a point as `rgb(...)`), and `tilted`.
+Returned: `el` (the frame element), `screen`, `image`, `k` (logical px per capture px), `toStage(cx, cy)` (capture px to stage px), `toLocal(cx, cy)` (capture px to px inside the frame, used with `tilt`), `pixel(cx, cy)` (the capture's color at a point as `rgb(...)`), `sw` and `sh` (screen width and height in logical px), `capTop` (height in capture px of the status band the kit added above the capture; 0 when the capture includes its own status bar), and `tilted`.
 
 ### Capture folders and fallback
 
@@ -167,7 +167,8 @@ Needs `three` (0.160 or newer) in the workspace's `node_modules` (`npm install t
 - `shotsmith render` writes `out/<locale>/<target>/<page>.png` and a `.sidecar.json` next to it.
 - `shotsmith build` renders everything, writes JPEGs to `export/<locale>/<target>/<page>.jpg` (exact target size, opaque RGB, baseline JPEG, quality 92, chroma 4:4:4), contact sheets and `REPORT.md`, and runs every check.
 - The export folder (`output` in the config) must be a real folder inside the workspace. Links are refused (`store.linked`), and Shotsmith never writes or deletes through one.
-- Anything in the export folder that is not an export of a configured locale, target and page is a stale file and an error (`store.stale`). `build` deletes stale images and then folders of removed locales and targets that are left empty; other stale files it only reports.
+- Anything in the export folder that is not an export of a configured locale, target and page is a stale file and an error (`store.stale`). `build` deletes stale images and then folders of removed locales and targets that are left empty; other stale files it only reports. The only other files that belong in the export folder are `contact-sheets/<locale>-<target>.jpg`, `REPORT.md` and `upload-*.json`.
+- The export folder must not be or sit inside `inputs`, `out`, `pages`, `fonts`, `review` or `node_modules` (any path segment, any case), and must not be the workspace root or contain `..`.
 
 ## What the checks cannot see
 
