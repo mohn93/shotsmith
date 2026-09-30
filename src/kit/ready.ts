@@ -53,8 +53,11 @@ function collectTexts(): SidecarText[] {
     if (r.width === 0 || r.height === 0) continue;
     if (!ids.has(el)) { ids.set(el, ids.size); el.setAttribute("data-sx", String(ids.get(el))); }
     const claimEl = el.closest<HTMLElement>("[data-claim]");
+    // A line-height below the font's content area (headlines use ~1.08) makes the last line's inline box spill a few px below the element.
+    // That is not an overflow, so vertical overflow gets a quarter-em of slack.
+    const slackY = claimEl ? 1 + 0.25 * (parseFloat(getComputedStyle(claimEl).fontSize) || 0) : 1;
     const overflow = !!claimEl && (claimEl.dataset.overflow === "1" ||
-      (claimEl.clientWidth > 0 && (claimEl.scrollWidth > claimEl.clientWidth + 1 || claimEl.scrollHeight > claimEl.clientHeight + 1)));
+      (claimEl.clientWidth > 0 && (claimEl.scrollWidth > claimEl.clientWidth + 1 || claimEl.scrollHeight > claimEl.clientHeight + slackY)));
     out.push({
       el: ids.get(el)!,
       claim: claimEl?.dataset.claim ?? null,
