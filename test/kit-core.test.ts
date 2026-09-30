@@ -1,4 +1,8 @@
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import { checkClaims } from "../src/checks/claims.js";
+import { loadClaims } from "../src/config/claims.js";
+import { loadConfig } from "../src/config/schema.js";
 import { outPath, renderPage } from "../src/render/render.js";
 import { tmpWorkspace, withRenderer } from "./helpers.js";
 
@@ -19,6 +23,28 @@ describe("kit core", () => {
     expect(sidecar.fonts.every((f) => f.status === "loaded")).toBe(true);
   });
 
+  it("catches text marked as a claim that is not the claim's text", async () => {
+    const ws = tmpWorkspace("kit");
+    fs.writeFileSync(`${ws}/pages/fake.html`, `<!doctype html><body><script type="module">
+      import { stage, t, ready } from "shotsmith/kit";
+      const s = await stage();
+      const h = t.el("div", "headline", s.root);
+      h.style.cssText = "position:absolute;left:80px;top:400px;font-size:60px";
+      const span = document.createElement("span");
+      span.textContent = " Rated #1";
+      h.appendChild(span);
+      const fake = document.createElement("div");
+      fake.dataset.claim = "headline";
+      fake.textContent = "Invented copy";
+      fake.style.cssText = "position:absolute;left:80px;top:800px;font-size:60px";
+      s.root.appendChild(fake);
+      await ready();</script></body></html>`);
+    const { sidecar } = await render(ws, "fake", "iphone-6.9", "en");
+    const mismatch = checkClaims(loadConfig(ws), loadClaims(ws), [sidecar]).filter((f) => f.rule === "claims.mismatch");
+    expect(mismatch.map((f) => f.message).sort()).toEqual([expect.stringMatching(/^"Invented copy"/), expect.stringMatching(/^"Rated #1"/)]);
+    expect(mismatch.every((f) => f.severity === "error")).toBe(true);
+  });
+
   it("flags text the configured font cannot cover", async () => {
     const { sidecar } = await render(tmpWorkspace("kit"), "texts", "iphone-6.9", "ar");
     const h = sidecar.texts.find((x) => x.claim === "headline" && !x.clipped)!;
@@ -28,7 +54,6 @@ describe("kit core", () => {
 
   it("sets lang and dir, and fails on an unknown claim", async () => {
     const ws = tmpWorkspace("kit");
-    const fs = await import("node:fs");
     fs.writeFileSync(`${ws}/pages/bad.html`, `<!doctype html><body><script type="module">
       import { stage, t, ready } from "shotsmith/kit";
       const s = await stage();
@@ -38,7 +63,6 @@ describe("kit core", () => {
 
   it("fails the render when an image does not load", async () => {
     const ws = tmpWorkspace("kit");
-    const fs = await import("node:fs");
     fs.writeFileSync(`${ws}/pages/img.html`, `<!doctype html><body><script type="module">
       import { stage, ready } from "shotsmith/kit";
       const s = await stage();

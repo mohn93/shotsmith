@@ -3,6 +3,8 @@ import type { ResolvedConfig } from "../config/schema.js";
 import type { Sidecar } from "../shared/sidecar.js";
 import { type Finding, err, warn } from "./findings.js";
 
+const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
+
 export function checkClaims(cfg: ResolvedConfig, claims: Claims, sidecars: Sidecar[]): Finding[] {
   const out = validateClaims(claims, cfg.locales.map((l) => l.code));
   const used = new Set<string>();
@@ -12,6 +14,10 @@ export function checkClaims(cfg: ResolvedConfig, claims: Claims, sidecars: Sidec
       if (t.claim) {
         used.add(t.claim);
         if (!claims[t.claim]) out.push(err("claims.unknown", `"${t.claim}" is not in claims.json`, where));
+        // data-claim alone proves nothing: the shown text must come from the claim's text for this locale.
+        else if (!collapse(claims[t.claim].text[s.locale] ?? "").includes(collapse(t.text))) {
+          out.push(err("claims.mismatch", `"${t.text.slice(0, 40)}" is marked as claim "${t.claim}" but is not its ${s.locale} text`, where));
+        }
       } else if (!t.chrome && s.kit) {
         out.push(err("claims.untraced", `"${t.text.slice(0, 40)}" is visible text not taken from claims.json; use t() or t.el()`, where));
       }
