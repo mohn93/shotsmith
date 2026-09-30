@@ -3,5 +3,5 @@
   "private": true,
   "type": "module",
   "scripts": { "build": "shotsmith build", "check": "shotsmith check" },
-  "dependencies": { "shotsmith": "^{{version}}" }
+  "dependencies": { "shotsmith": "^{{version}}", "three": "^0.186.1" }
 }

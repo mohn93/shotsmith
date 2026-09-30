@@ -107,16 +107,23 @@ function diskCase(dir: string, segments: string[]): string[] {
   return out;
 }
 
-// Resolves a same-server request exactly as server.ts does, so /pages/..%2Finputs/x, /Inputs/x and the localhost
-// host name are all seen as the capture they load. Returns /inputs/<platform>/... or null.
+// Resolves a same-server request exactly as server.ts does, so /pages/..%2Finputs/x, /Inputs/x, a symlink into
+// inputs/ and the localhost host name are all seen as the capture they load. Returns /inputs/<platform>/... or null.
 function captureOf(root: string, pathname: string): string | null {
   if (pathname.startsWith("/__shotsmith/") || pathname.startsWith("/sysfont/")) return null;
-  const rel = path.relative(root, path.resolve(root, "." + pathname));
+  const file = path.resolve(root, "." + pathname);
+  const rel = path.relative(root, file);
   if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  const canonical = (dir: string, segments: string[]) => `/inputs/${diskCase(dir, segments).join("/")}`;
+  try {
+    // The file exists: the real path decides, so a link from elsewhere in the workspace into inputs/ counts.
+    const inputs = fs.realpathSync(path.join(root, "inputs")), real = fs.realpathSync(file);
+    const within = path.relative(inputs, real);
+    if (within && !within.startsWith("..") && !path.isAbsolute(within)) return canonical(inputs, within.split(path.sep));
+  } catch { /* missing file or no inputs folder: fall back to the requested spelling */ }
   const [top, ...rest] = rel.split(path.sep);
   if (top.toLowerCase() !== "inputs" || !rest.length) return null;
-  const inputs = diskCase(root, [top])[0];
-  return `/inputs/${diskCase(path.join(root, inputs), rest).join("/")}`;
+  return canonical(path.join(root, diskCase(root, [top])[0]), rest);
 }
 
 function recordRequest(requests: Sidecar["requests"], hosts: Set<string>, root: string, url: string, font: boolean): void {

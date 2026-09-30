@@ -240,6 +240,20 @@ describe("renderer", () => {
     });
   });
 
+  it("records a capture reached through a symlink into inputs", async () => {
+    const ws = tmpWorkspace("basic");
+    fs.mkdirSync(`${ws}/inputs/iphone/en`, { recursive: true });
+    await sharp({ create: { width: 4, height: 4, channels: 3, background: "#00f" } }).png().toFile(`${ws}/inputs/iphone/en/home.png`);
+    fs.symlinkSync("../inputs/iphone", `${ws}/pages/cap`, "dir");
+    fs.writeFileSync(`${ws}/pages/linked.html`, `<!doctype html><body><script>
+      const img = new Image();
+      img.onload = () => { window.__ready = true; };
+      img.onerror = () => { window.__shotsmithError = "capture did not load"; };
+      img.src = "/pages/cap/en/home.png";</script></body></html>`);
+    const { sidecar } = await withRenderer(ws, (r) => renderPage(r, { page: "linked", target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", "linked") }));
+    expect(sidecar.requests.captures).toEqual(["/inputs/iphone/en/home.png"]);
+  });
+
   it("renders from the CLI", () => {
     const ws = tmpWorkspace("basic");
     execFileSync("node", [`${ROOT}/dist/cli.js`, "render", "plain", "-C", ws, "-t", "iphone-6.9"], { encoding: "utf8" });

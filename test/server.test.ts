@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { injectImportMap, startServer, type RenderServer } from "../src/render/server.js";
-import { tempDir } from "./helpers.js";
+import { tempDir, tmpWorkspace } from "./helpers.js";
 
 let root: string, kit: string, server: RenderServer;
 
@@ -49,6 +49,23 @@ describe("render server", () => {
   it("refuses paths outside the workspace", async () => {
     expect((await fetch(`${server.url}/..%2f..%2fetc%2fpasswd`)).status).toBe(404);
     expect((await fetch(`${server.url}/pages`)).status).toBe(404);
+  });
+
+  it("refuses symlinks that leave the workspace and keeps a linked node_modules working", async () => {
+    fs.symlinkSync("/etc", path.join(root, "etclink"), "dir");
+    expect((await fetch(`${server.url}/etclink/hosts`)).status).toBe(404);
+    const kitOut = tempDir("kit-out-");
+    fs.writeFileSync(path.join(kitOut, "secret.js"), "x");
+    fs.symlinkSync(path.join(kitOut, "secret.js"), path.join(kit, "leak.js"));
+    expect((await fetch(`${server.url}/__shotsmith/kit/leak.js`)).status).toBe(404);
+    expect((await fetch(`${server.url}/__shotsmith/kit/index.js`)).status).toBe(200);
+    const ws = tmpWorkspace("basic");
+    const linked = await startServer({ root: ws, kitDir: kit, context: () => ({}) as never });
+    try {
+      expect((await fetch(`${linked.url}/node_modules/three/build/three.module.js`)).status).toBe(200);
+      fs.symlinkSync("/etc", path.join(ws, "node_modules-x"), "dir");
+      expect((await fetch(`${linked.url}/node_modules-x/hosts`)).status).toBe(404);
+    } finally { await linked.close(); }
   });
 
   it("refuses requests for any other host name (DNS rebinding)", async () => {

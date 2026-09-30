@@ -71,6 +71,24 @@ function sendFile(res: http.ServerResponse, file: string, transform?: (s: string
 
 const inside = (root: string, p: string) => p === root || p.startsWith(root + path.sep);
 
+function realOrNull(p: string): string | null {
+  try { return fs.realpathSync(p); } catch { return null; }
+}
+
+// Resolves a request under base to a real file, or null. The real path (symlinks followed) must stay inside
+// realpath(base), so a link to /etc, or to another folder, is refused. A path under base/node_modules may instead
+// leave through links as long as it stays inside realpath(base/node_modules), so linked and pnpm installs work.
+function resolveInside(base: string, rel: string): string | null {
+  const f = path.resolve(base, rel);
+  if (!inside(base, f)) return null;
+  const real = realOrNull(f);
+  if (!real) return null;
+  const modules = path.join(base, "node_modules");
+  const allowed = inside(modules, f) ? realOrNull(modules) : realOrNull(base);
+  if (!allowed || !inside(allowed, real)) return null;
+  try { return fs.statSync(real).isFile() ? real : null; } catch { return null; }
+}
+
 export async function startServer(opts: { root: string; kitDir: string; context: (target: string, locale: string, page: string) => KitContext }): Promise<RenderServer> {
   const root = path.resolve(opts.root), kit = path.resolve(opts.kitDir);
   // Set once the port is known. Requests naming any other host are refused, so a page on another site cannot reach
@@ -104,15 +122,15 @@ export async function startServer(opts: { root: string; kitDir: string; context:
         }
       }
       if (pathname.startsWith("/__shotsmith/kit/")) {
-        const f = path.resolve(kit, "." + pathname.slice("/__shotsmith/kit".length));
-        return inside(kit, f) && fs.existsSync(f) && fs.statSync(f).isFile() ? sendFile(res, f) : notFound();
+        const f = resolveInside(kit, "." + pathname.slice("/__shotsmith/kit".length));
+        return f ? sendFile(res, f) : notFound();
       }
       if (pathname.startsWith("/sysfont/")) {
         const f = findSysFont(pathname.slice("/sysfont/".length));
         return f ? sendFile(res, f) : notFound();
       }
-      const f = path.resolve(root, "." + pathname);
-      if (!inside(root, f) || !fs.existsSync(f) || !fs.statSync(f).isFile()) return notFound();
+      const f = resolveInside(root, "." + pathname);
+      if (!f) return notFound();
       if (f.endsWith(".html")) return sendFile(res, f, (html) => injectImportMap(html, importMapFor(root)));
       return sendFile(res, f);
     } catch {
