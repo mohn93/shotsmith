@@ -25,8 +25,9 @@ export function checkInputs(cfg: ResolvedConfig): Finding[] {
   const missing = platforms.filter((p) => !hasImages(path.join(cfg.root, "inputs", p))).map((p) =>
     err("capture.platform", `No captures in inputs/${p}/. Captures never come from another platform; add ${p} captures or drop its targets`));
   const hashes = placeholderHashes(cfg.root);
-  const placeholders = hashes.size === 0 ? [] : captureFiles(path.join(cfg.root, "inputs")).filter((f) => {
+  // Only the platforms that have targets are rendered, so only their captures can ship.
+  const placeholders = hashes.size === 0 ? [] : platforms.flatMap((p) => captureFiles(path.join(cfg.root, "inputs", p))).filter((f) => {
     try { return hashes.has(createHash("sha256").update(fs.readFileSync(f)).digest("hex")); } catch { return false; }
-  }).map((f) => err("capture.placeholder", `${path.relative(cfg.root, f).split(path.sep).join("/")} is still the placeholder that init generated; replace it with a real capture`));
+  }).map((f) => err("capture.placeholder", `${path.relative(cfg.root, f).split(path.sep).join("/")} is still the placeholder that init generated; replace it with a real capture, or delete it if this platform has no targets`));
   return [...missing, ...placeholders];
 }

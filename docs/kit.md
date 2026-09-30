@@ -113,7 +113,7 @@ Captures live in `inputs/<platform>/<locale>/<name>.png` (`.jpg`/`.webp` also wo
 
 Captures never fall back across platforms: an iPhone target never reads `inputs/android-phone/`. The renderer records every capture a page requests, and loading another platform's capture is an error (`capture.crossPlatform`), even if the page loads it by hand. A platform with targets and no captures is `capture.platform`.
 
-`shotsmith init` writes a placeholder capture at `inputs/iphone/en/home.png`. Until you replace it, `check` fails with `capture.placeholder`.
+`shotsmith init` writes a placeholder capture at `inputs/iphone/en/home.png`. Until you replace it, `check` fails with `capture.placeholder`. Only captures of platforms that have targets are checked, so a Google Play-only workspace can leave it or delete it.
 
 ## lift
 

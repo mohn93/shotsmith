@@ -72,9 +72,24 @@ describe("init", () => {
     expect(found).toHaveLength(1);
     expect(found[0].severity).toBe("error");
     expect(found[0].message).toContain("inputs/iphone/en/home.png");
-    expect(found[0].message).toMatch(/[Rr]eplace/);
+    expect(found[0].message).toMatch(/replace it with a real capture, or delete it if this platform has no targets$/);
     await sharp({ create: { width: 8, height: 8, channels: 3, background: "#123456" } }).png().toFile(capture);
     expect(checkInputs(loadConfig(dir))).toEqual([]);
+  });
+
+  it("ignores the iPhone placeholder in a workspace with only Google Play targets", async () => {
+    const dir = tempDir("init-play-");
+    await init(dir, { install: false });
+    const cfg = JSON.parse(fs.readFileSync(`${dir}/shotsmith.config.json`, "utf8"));
+    cfg.targets = ["android-phone"];
+    fs.writeFileSync(`${dir}/shotsmith.config.json`, JSON.stringify(cfg));
+    fs.mkdirSync(`${dir}/inputs/android-phone/en`, { recursive: true });
+    await sharp({ create: { width: 8, height: 8, channels: 3, background: "#123456" } }).png().toFile(`${dir}/inputs/android-phone/en/home.png`);
+    expect(fs.existsSync(`${dir}/inputs/iphone/en/home.png`)).toBe(true);
+    expect(checkInputs(loadConfig(dir))).toEqual([]);
+    // The same placeholder copied into the Play folder still fails.
+    fs.copyFileSync(`${dir}/inputs/iphone/en/home.png`, `${dir}/inputs/android-phone/en/home.png`);
+    expect(checkInputs(loadConfig(dir)).map((f) => f.message)).toEqual([expect.stringMatching(/^inputs\/android-phone\/en\/home\.png is still the placeholder/)]);
   });
 
   it("leaves the directory as it was when creating the placeholder fails", async () => {
