@@ -49,4 +49,16 @@ describe("render server", () => {
     expect((await fetch(`${server.url}/..%2f..%2fetc%2fpasswd`)).status).toBe(404);
     expect((await fetch(`${server.url}/pages`)).status).toBe(404);
   });
+
+  it("returns 500 for malformed importmap JSON in a page", async () => {
+    fs.writeFileSync(path.join(root, "pages/bad.html"), "<!doctype html><html><head><script type=\"importmap\">{invalid json}</script></head><body></body></html>");
+    const res = await fetch(`${server.url}/pages/bad.html`);
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/bad\.html/);
+  });
+
+  it("survives a bad page and handles subsequent requests", async () => {
+    expect(await (await fetch(`${server.url}/pages/a.html`)).text()).toContain("shotsmith/kit");
+  });
 });

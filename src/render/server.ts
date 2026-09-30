@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import stream from "node:stream";
 import type { KitContext } from "../shared/context.js";
 import { findSysFont } from "./fonts.js";
 
@@ -36,11 +37,36 @@ export function injectImportMap(html: string, imports: Record<string, string>): 
   return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (h) => h + tag) : tag + html;
 }
 
-function sendFile(res: http.ServerResponse, file: string, transform?: (s: string) => string) {
-  const type = TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream";
-  res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
-  if (transform) res.end(transform(fs.readFileSync(file, "utf8")));
-  else fs.createReadStream(file).pipe(res);
+function sendFile(res: http.ServerResponse, file: string, transform?: (s: string) => string): boolean {
+  try {
+    const type = TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream";
+    if (transform) {
+      const content = fs.readFileSync(file, "utf8");
+      const transformed = transform(content);
+      res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
+      res.end(transformed);
+    } else {
+      res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
+      stream.pipeline(fs.createReadStream(file), res, (err) => {
+        if (err && !res.headersSent) {
+          res.writeHead(500, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: `${path.basename(file)}: ${(err as Error).message}` }));
+        } else if (err) {
+          res.destroy();
+        }
+      });
+    }
+    return true;
+  } catch (e) {
+    const message = `${path.basename(file)}: ${(e as Error).message}`;
+    if (res.headersSent) {
+      res.destroy();
+    } else {
+      res.writeHead(500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: message }));
+    }
+    return false;
+  }
 }
 
 const inside = (root: string, p: string) => p === root || p.startsWith(root + path.sep);
@@ -48,7 +74,14 @@ const inside = (root: string, p: string) => p === root || p.startsWith(root + pa
 export async function startServer(opts: { root: string; kitDir: string; context: (target: string, locale: string, page: string) => KitContext }): Promise<RenderServer> {
   const root = path.resolve(opts.root), kit = path.resolve(opts.kitDir);
   const server = http.createServer((req, res) => {
-    const notFound = () => { res.writeHead(404); res.end(); };
+    const notFound = () => {
+      if (res.headersSent) {
+        res.end();
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    };
     try {
       const url = new URL(req.url ?? "/", "http://x");
       const pathname = decodeURIComponent(url.pathname);
