@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
@@ -8,9 +7,10 @@ import { checkInputs } from "../src/checks/inputs.js";
 import { checkSidecars, loadSidecars } from "../src/checks/sidecars.js";
 import { checkExports, exportPath } from "../src/checks/store.js";
 import { emptySidecar, type Sidecar } from "../src/shared/sidecar.js";
+import { tempDir } from "./helpers.js";
 
 function ws(targets: unknown[], pages = ["a", "b"]): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "check-"));
+  const dir = tempDir("check-");
   fs.writeFileSync(path.join(dir, "shotsmith.config.json"), JSON.stringify({ app: "A", pages, targets, locales: [{ code: "en" }] }));
   return dir;
 }

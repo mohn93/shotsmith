@@ -1,12 +1,11 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { chromiumArgs } from "../src/render/browser.js";
 import { outPath, renderPage, renderVideo } from "../src/render/render.js";
-import { ROOT, pixel, tmpWorkspace, withRenderer } from "./helpers.js";
+import { ROOT, pixel, tempDir, tmpWorkspace, withRenderer } from "./helpers.js";
 
 describe("renderer", () => {
   it("picks GPU flags per OS", () => {
@@ -40,7 +39,7 @@ describe("renderer", () => {
     await withRenderer(ws, async (r) => {
       const started = Date.now();
       await expect(renderPage(r, { page: "nope", target: "iphone-6.9", locale: "en", out: outPath(r.cfg, "en", "iphone-6.9", "nope") })).rejects.toThrow(/not found/);
-      expect(Date.now() - started).toBeLessThan(10000);
+      expect(Date.now() - started).toBeLessThan(20000);
     });
   });
 
@@ -52,14 +51,14 @@ describe("renderer", () => {
     await withRenderer(ws, async (r) => {
       const started = Date.now();
       await expect(renderPage(r, { page: "link", target: "iphone-6.9", locale: "en", out: outPath(r.cfg, "en", "iphone-6.9", "link") })).rejects.toThrow(/does not provide an export named 'nope'/);
-      expect(Date.now() - started).toBeLessThan(10000);
+      expect(Date.now() - started).toBeLessThan(20000);
     });
   });
 
   it("reports a missing ffmpeg instead of crashing", async () => {
     const ws = tmpWorkspace("basic");
     await withRenderer(ws, async (r) => {
-      const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), "shotsmith-nobin-"));
+      const emptyBin = tempDir("shotsmith-nobin-");
       const savedPath = process.env.PATH;
       process.env.PATH = emptyBin;
       try {

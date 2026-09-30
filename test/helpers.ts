@@ -7,6 +7,13 @@ import { openRenderer, type Renderer } from "../src/render/render.js";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// Creates a fresh directory under test/.tmp (wiped at the start of every run by test/global-setup.ts).
+export function tempDir(prefix: string): string {
+  const base = path.join(ROOT, "test/.tmp");
+  fs.mkdirSync(base, { recursive: true });
+  return fs.mkdtempSync(path.join(base, prefix));
+}
+
 // Copies a fixture workspace into test/.tmp and links the repo's node_modules (three, gsap) into it.
 export function tmpWorkspace(fixture: string): string {
   const dir = path.join(ROOT, "test/.tmp", `${fixture}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`);

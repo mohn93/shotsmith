@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
@@ -7,6 +6,7 @@ import { loadConfig } from "../src/config/schema.js";
 import { outPath } from "../src/render/render.js";
 import { seamSteps, strip } from "../src/review/strip.js";
 import { thumbs } from "../src/review/thumbs.js";
+import { tempDir } from "./helpers.js";
 
 const solid = (w: number, h: number, v: number) => Buffer.alloc(w * h * 3, v);
 const gradient = (w: number, h: number, x0: number) => {
@@ -22,7 +22,7 @@ describe("review", () => {
   });
 
   it("writes thumbnail rows and strips", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rev-"));
+    const dir = tempDir("rev-");
     fs.writeFileSync(path.join(dir, "shotsmith.config.json"), JSON.stringify({ app: "A", pages: ["a", "b"], targets: ["android-phone"], locales: [{ code: "en" }] }));
     const cfg = loadConfig(dir);
     for (const [p, v] of [["a", 40], ["b", 40]] as const) {

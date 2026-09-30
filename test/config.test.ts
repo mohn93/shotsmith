@@ -1,11 +1,11 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig } from "../src/config/schema.js";
+import { tempDir } from "./helpers.js";
 
 function ws(config: unknown): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "shotsmith-config-"));
+  const dir = tempDir("shotsmith-config-");
   fs.writeFileSync(path.join(dir, "shotsmith.config.json"), JSON.stringify(config));
   return dir;
 }
@@ -46,6 +46,6 @@ describe("loadConfig", () => {
 
   it("rejects duplicate locales and a missing file", () => {
     expect(() => loadConfig(ws({ ...base, locales: [{ code: "en" }, { code: "en" }] }))).toThrow(/duplicate locale/i);
-    expect(() => loadConfig(fs.mkdtempSync(path.join(os.tmpdir(), "empty-")))).toThrow(/shotsmith\.config\.json/);
+    expect(() => loadConfig(tempDir("empty-"))).toThrow(/shotsmith\.config\.json/);
   });
 });

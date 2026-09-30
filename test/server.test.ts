@@ -1,19 +1,19 @@
 import fs from "node:fs";
 import http from "node:http";
-import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { injectImportMap, startServer, type RenderServer } from "../src/render/server.js";
+import { tempDir } from "./helpers.js";
 
 let root: string, kit: string, server: RenderServer;
 
 beforeAll(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "srv-"));
-  kit = fs.mkdtempSync(path.join(os.tmpdir(), "kit-"));
+  root = tempDir("srv-");
+  kit = tempDir("kit-");
   fs.mkdirSync(path.join(root, "pages"));
   fs.writeFileSync(path.join(root, "pages/a.html"), "<!doctype html><html><head><title>a</title></head><body></body></html>");
   fs.writeFileSync(path.join(kit, "index.js"), "export const k = 1;");
-  const fontDir = fs.mkdtempSync(path.join(os.tmpdir(), "sf-"));
+  const fontDir = tempDir("sf-");
   fs.writeFileSync(path.join(fontDir, "X.otf"), "font");
   process.env.FONT_DIRS = fontDir;
   server = await startServer({
