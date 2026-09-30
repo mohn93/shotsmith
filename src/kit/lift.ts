@@ -19,10 +19,12 @@ export function lift(d: Device, o: LiftOptions): HTMLDivElement {
   const w = cw * d.k * scale, h = ch * d.k * scale, radius = (o.radius ?? 28) * d.k * scale;
 
   if (mode === "recess") {
-    const [rx, ry] = d.toLocal(x0, y0);
+    // The recess reaches past the region so resampling and anti-aliasing cannot let the source row show at its edges.
+    const bleed = Math.max(inset, 2);
+    const [rx, ry] = d.toLocal(x0 - bleed, y0 - bleed);
     const rec = document.createElement("div");
-    Object.assign(rec.style, { position: "absolute", left: `${rx}px`, top: `${ry}px`, width: `${(x1 - x0) * d.k}px`, height: `${(y1 - y0) * d.k}px`,
-      background: d.pixel(Math.max(0, x0 - 4), (y0 + y1) / 2), borderRadius: `${radius / scale}px`, boxShadow: "inset 0 6px 18px rgba(0,0,0,0.12)", zIndex: "1" });
+    Object.assign(rec.style, { position: "absolute", left: `${rx}px`, top: `${ry}px`, width: `${(x1 - x0 + 2 * bleed) * d.k}px`, height: `${(y1 - y0 + 2 * bleed) * d.k}px`,
+      background: d.pixel(Math.max(0, x0 - bleed - 4), (y0 + y1) / 2), borderRadius: `${radius / scale + bleed * d.k}px`, boxShadow: "inset 0 6px 18px rgba(0,0,0,0.12)", zIndex: "1" });
     d.el.appendChild(rec);
   }
 
