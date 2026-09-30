@@ -15,6 +15,10 @@ export interface BuildOptions { targets?: string[]; locales?: string[]; jobs?: n
 export interface BuildResult { rendered: RenderResult[]; failures: { job: RenderJob; error: string }[]; findings: Finding[]; report: string }
 
 export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<BuildResult> {
+  const unknownTargets = (o.targets ?? []).filter((n) => !cfg.targets.some((t) => t.name === n));
+  if (unknownTargets.length) throw new Error(`Unknown target(s): ${unknownTargets.join(", ")}; configured: ${cfg.targets.map((t) => t.name).join(", ")}`);
+  const unknownLocales = (o.locales ?? []).filter((c) => !cfg.locales.some((l) => l.code === c));
+  if (unknownLocales.length) throw new Error(`Unknown locale(s): ${unknownLocales.join(", ")}; configured: ${cfg.locales.map((l) => l.code).join(", ")}`);
   const targets = cfg.targets.filter((t) => !o.targets?.length || o.targets.includes(t.name));
   const locales = cfg.locales.filter((l) => !o.locales?.length || o.locales.includes(l.code));
   const jobs: RenderJob[] = locales.flatMap((l) => targets.flatMap((t) => cfg.pages.map((page) => ({ page, target: t.name, locale: l.code, out: outPath(cfg, l.code, t.name, page) }))));
@@ -50,7 +54,8 @@ export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<
   const scope = (f: Where) => (!f.locale || locales.some((l) => l.code === f.locale)) && (!f.target || targets.some((t) => t.name === f.target));
   const { sidecars, findings: missing } = loadSidecars(cfg);
   const findings = [
-    ...checkInputs(cfg),
+    // Only the platforms of the targets being built need captures.
+    ...checkInputs({ ...cfg, targets }),
     ...failures.map((f) => err("render.failed", f.error.split("\n")[0], { locale: f.job.locale, target: f.job.target, page: f.job.page })),
     ...missing.filter(scope).filter((m) => !failures.some((f) => f.job.page === m.page && f.job.target === m.target && f.job.locale === m.locale)),
     ...checkSidecars(cfg, sidecars.filter((s) => scope(s))),

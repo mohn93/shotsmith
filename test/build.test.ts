@@ -23,6 +23,11 @@ const cli = (ws: string, ...args: string[]) => {
   catch (e: any) { return { code: e.status as number, out: String(e.stdout) }; }
 };
 
+const cliErr = (ws: string, ...args: string[]) => {
+  try { execFileSync("node", [`${ROOT}/dist/cli.js`, ...args, "-C", ws, "--json"], { encoding: "utf8", stdio: "pipe" }); return { code: 0, err: "" }; }
+  catch (e: any) { return { code: e.status as number, err: String(e.stderr) }; }
+};
+
 describe("build", () => {
   it("renders the matrix, exports store-ready JPEGs and passes the checks", async () => {
     const ws = prepare();
@@ -54,5 +59,33 @@ describe("build", () => {
     expect(code).toBe(1);
     expect(JSON.parse(out).errors.some((e: any) => e.rule === "claims.untraced")).toBe(true);
     expect(fs.readFileSync(`${ws}/export/REPORT.md`, "utf8")).toMatch(/claims\.untraced/);
+  });
+
+  it("rejects unknown targets and locales and invalid --jobs", () => {
+    const ws = prepare();
+    const t = cliErr(ws, "build", "-t", "iphone-69");
+    expect(t.code).not.toBe(0);
+    expect(t.err).toMatch(/Unknown target\(s\): iphone-69/);
+    const l = cliErr(ws, "build", "-l", "fr");
+    expect(l.code).not.toBe(0);
+    expect(l.err).toMatch(/Unknown locale\(s\): fr/);
+    const j = cliErr(ws, "build", "--jobs", "abc");
+    expect(j.code).not.toBe(0);
+    expect(j.err).toMatch(/--jobs must be/);
+    expect(cliErr(ws, "build", "--jobs", "0").code).not.toBe(0);
+    expect(fs.existsSync(`${ws}/export`)).toBe(false);
+  });
+
+  it("does not require captures for platforms that are not being built", async () => {
+    const ws = prepare();
+    await makeCaptures(ws);
+    fs.rmSync(`${ws}/inputs/android-phone`, { recursive: true });
+    fs.mkdirSync(`${ws}/inputs/iphone/de`, { recursive: true });
+    fs.copyFileSync(`${ws}/inputs/iphone/en/home.png`, `${ws}/inputs/iphone/de/home.png`);
+    const { code, out } = cli(ws, "build", "-t", "iphone-6.9");
+    const res = JSON.parse(out);
+    expect(res.errors.filter((e: any) => e.rule === "capture.platform")).toEqual([]);
+    expect(res.errors).toEqual([]);
+    expect(code).toBe(0);
   });
 });
