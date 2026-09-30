@@ -1,6 +1,8 @@
 export interface SidecarText {
   el: number; claim: string | null; chrome: boolean; text: string; box: [number, number, number, number]; font: string;
   overflow: boolean; clipped: boolean; safeArea: boolean; shrink: number | null; covered: boolean; fallbackFonts: string[];
+  // Code points (U+XXXX) no face of the configured font has a glyph for; Chromium draws them as tofu or with a system font.
+  missingGlyphs?: string[];
 }
 export interface SidecarFont { family: string; weight: string; url: string; status: "loaded" | "unloaded" }
 export interface SidecarDevice { platform: string; capture: string; statusBar: "included" | "none"; repaint: boolean; screen: [number, number] }

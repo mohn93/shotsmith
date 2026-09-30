@@ -14,7 +14,7 @@ describe("kit core", () => {
     const { sidecar } = await render(tmpWorkspace("kit"), "texts", "iphone-6.9", "en");
     expect(sidecar.kit).toBe(true);
     const byText = (s: string) => sidecar.texts.find((x) => x.text.startsWith(s))!;
-    expect(byText("Fresh ideas")).toMatchObject({ claim: "headline", chrome: false, overflow: false, covered: true });
+    expect(byText("Fresh ideas")).toMatchObject({ claim: "headline", chrome: false, overflow: false, covered: true, missingGlyphs: [] });
     expect(byText("Untraced")).toMatchObject({ claim: null, chrome: false });
     expect(byText("9:41")).toMatchObject({ chrome: true });
     expect(byText("A headline")).toMatchObject({ claim: "long", overflow: true });
@@ -49,7 +49,26 @@ describe("kit core", () => {
     const { sidecar } = await render(tmpWorkspace("kit"), "texts", "iphone-6.9", "ar");
     const h = sidecar.texts.find((x) => x.claim === "headline" && !x.clipped)!;
     expect(h.covered).toBe(false);
-    expect(h.fallbackFonts.length).toBeGreaterThan(0);
+    // Inter has no Arabic; this holds whether or not an Arabic system font is installed.
+    expect(h.missingGlyphs).toContain("U+0627");
+    expect(h.missingGlyphs).not.toContain("U+0020");
+  });
+
+  it("flags a character no font has a glyph for", async () => {
+    const ws = tmpWorkspace("kit");
+    const claims = JSON.parse(fs.readFileSync(`${ws}/claims.json`, "utf8"));
+    claims.pua = { source: "store-copy: pua", text: { en: "Tap \uE001 to start", de: "x", ar: "x" } };
+    fs.writeFileSync(`${ws}/claims.json`, JSON.stringify(claims));
+    fs.writeFileSync(`${ws}/pages/pua.html`, `<!doctype html><body><script type="module">
+      import { stage, t, ready } from "shotsmith/kit";
+      const s = await stage();
+      const h = t.el("div", "pua", s.root);
+      h.style.cssText = "position:absolute;left:80px;top:400px;font:400 60px var(--font-text)";
+      await ready();</script></body></html>`);
+    const { sidecar } = await render(ws, "pua", "iphone-6.9", "en");
+    const p = sidecar.texts.find((x) => x.claim === "pua")!;
+    expect(p.covered).toBe(false);
+    expect(p.missingGlyphs).toEqual(["U+E001"]);
   });
 
   it("sets lang and dir, and fails on an unknown claim", async () => {

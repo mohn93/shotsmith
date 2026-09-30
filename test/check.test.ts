@@ -46,4 +46,12 @@ describe("checks", () => {
     expect(f.find((x) => x.rule === "text.shrink")!.severity).toBe("warning");
     expect(loadSidecars(cfg).findings.map((x) => x.rule)).toEqual(["render.missing"]);
   });
+
+  it("reports characters the configured font has no glyph for", () => {
+    const cfg = loadConfig(ws(["android-phone"], ["a"]));
+    const text = { el: 0, claim: "h", chrome: false, text: "Tap \uE001", box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: false, clipped: false, safeArea: false, shrink: null, covered: false, fallbackFonts: [], missingGlyphs: ["U+E001"] };
+    const sc: Sidecar = { page: "a", target: "android-phone", locale: "en", kit: true, texts: [text], captures: [], devices: [], lifts: 0, fonts: [], warnings: [] };
+    const f = checkSidecars(cfg, [sc]);
+    expect(f).toEqual([expect.objectContaining({ rule: "text.coverage", severity: "error", message: expect.stringContaining("U+E001") })]);
+  });
 });

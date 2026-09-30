@@ -5,9 +5,11 @@ import type { Browser, Page } from "playwright";
 import { loadClaims } from "../config/claims.js";
 import { type ResolvedConfig, loadConfig } from "../config/schema.js";
 import { kitDir } from "../shared/paths.js";
+import type { KitContext } from "../shared/context.js";
 import { type Sidecar, emptySidecar } from "../shared/sidecar.js";
 import { launch } from "./browser.js";
 import { buildContext } from "./context.js";
+import { type GlyphCache, fontFileForUrl, openGlyphSources } from "./fonts.js";
 import { type RenderServer, startServer } from "./server.js";
 
 export interface Renderer { cfg: ResolvedConfig; browser: Browser; server: RenderServer; timeoutMs: number; close(): Promise<void> }
@@ -63,22 +65,47 @@ async function openPage(r: Renderer, job: RenderJob, logs: string[]): Promise<Pa
   return tab;
 }
 
-// Marks texts whose glyphs came from a system font rather than a loaded web font.
-async function applyCoverage(tab: Page, sidecar: Sidecar): Promise<void> {
+// Characters that never need a glyph of their own.
+const NO_GLYPH = /[\s\p{Cc}\p{Default_Ignorable_Code_Point}]/u;
+
+const firstFamily = (fontFamily: string): string => (fontFamily.split(",")[0] ?? "").trim().replace(/^(["'])(.*)\1$/, "$2");
+
+// Marks texts that are not fully drawn by the configured font: glyphs that came from a system font (reported by
+// Chromium), and code points no face of the configured family has a glyph for. When no installed font has the glyph
+// either, Chromium draws the web font's .notdef box and reports only the web font, so the second check is needed.
+async function applyCoverage(tab: Page, sidecar: Sidecar, fonts: KitContext["fonts"], root: string, cache: GlyphCache): Promise<void> {
   if (!sidecar.texts.length) return;
   const cdp = await tab.context().newCDPSession(tab);
   await cdp.send("DOM.enable");
   await cdp.send("CSS.enable");
-  const { root } = await cdp.send("DOM.getDocument", { depth: -1 });
-  const { nodeIds } = await cdp.send("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "[data-sx]" });
+  const { root: doc } = await cdp.send("DOM.getDocument", { depth: -1 });
+  const { nodeIds } = await cdp.send("DOM.querySelectorAll", { nodeId: doc.nodeId, selector: "[data-sx]" });
   for (const nodeId of nodeIds) {
     const { attributes } = await cdp.send("DOM.getAttributes", { nodeId });
     const el = Number(attributes[attributes.indexOf("data-sx") + 1]);
-    const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
-    const system = fonts.filter((f) => !f.isCustomFont).map((f) => f.familyName);
+    const { fonts: used } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+    const system = used.filter((f) => !f.isCustomFont).map((f) => f.familyName);
     for (const t of sidecar.texts) if (t.el === el) { t.covered = system.length === 0; t.fallbackFonts = system; }
   }
   await cdp.detach();
+
+  for (const t of sidecar.texts) {
+    const family = Object.values(fonts).find((f) => f.family === firstFamily(t.font));
+    if (!family) continue;
+    const sources = family.faces.flatMap((face) => {
+      const file = fontFileForUrl(root, face.url);
+      return file ? openGlyphSources(file, cache) : [];
+    });
+    if (!sources.length) continue;
+    const missing = new Set<string>();
+    for (const ch of t.text) {
+      if (NO_GLYPH.test(ch)) continue;
+      const cp = ch.codePointAt(0)!;
+      if (!sources.some((f) => f.hasGlyphForCodePoint(cp))) missing.add(`U+${cp.toString(16).toUpperCase().padStart(4, "0")}`);
+    }
+    t.missingGlyphs = [...missing];
+    if (missing.size) t.covered = false;
+  }
 }
 
 export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderResult> {
@@ -101,7 +128,10 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
     const sidecar: Sidecar = raw
       ? { ...raw, page: job.page, target: job.target, locale: job.locale, kit: true }
       : emptySidecar(job.page, job.target, job.locale, "kit.unused: page did not use the kit; its text and fonts were not checked");
-    await applyCoverage(tab, sidecar);
+    if (sidecar.texts.length) {
+      const c = buildContext(loadConfig(r.cfg.root), loadClaims(r.cfg.root), job.target, job.locale, job.page);
+      await applyCoverage(tab, sidecar, c.fonts, r.cfg.root, new Map());
+    }
     const sidecarPath = job.out.replace(/\.png$/, ".json");
     fs.writeFileSync(sidecarPath, JSON.stringify(sidecar, null, 2) + "\n");
     return { ...job, sidecar, sidecarPath, logs, ms: Date.now() - started };

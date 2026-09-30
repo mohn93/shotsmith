@@ -24,7 +24,14 @@ export function checkSidecars(cfg: ResolvedConfig, sidecars: Sidecar[]): Finding
       if (t.overflow) out.push(err("text.overflow", `${q} does not fit its box`, where));
       if (t.clipped) out.push(err("text.clipped", `${q} runs off the image`, where));
       if (t.safeArea && !t.clipped) out.push(err("text.safeArea", `${q} is inside the top or bottom 4%`, where));
-      if (!t.covered) out.push(err("text.coverage", `${q} renders with system font(s) ${t.fallbackFonts.join(", ")}; the configured font does not cover it`, where));
+      if (!t.covered) {
+        const missing = t.missingGlyphs ?? [];
+        const why = [
+          t.fallbackFonts.length ? `renders with system font(s) ${t.fallbackFonts.join(", ")}` : "",
+          missing.length ? `has characters with no glyph in the configured font (${missing.slice(0, 8).join(" ")}${missing.length > 8 ? " ..." : ""})` : "",
+        ].filter(Boolean).join(" and ");
+        out.push(err("text.coverage", `${q} ${why || "is not covered"}; the configured font does not cover it`, where));
+      }
       if (t.shrink !== null && t.shrink < 0.8) out.push(warn("text.shrink", `${q} shrank to ${Math.round(t.shrink * 100)}% of its size to fit`, where));
     }
     if (store === "play") for (const f of s.fonts) {

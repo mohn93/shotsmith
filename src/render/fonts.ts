@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import * as fontkit from "fontkit";
 
 export function fontDirs(): string[] {
   if (process.env.FONT_DIRS) return process.env.FONT_DIRS.split(":").filter(Boolean);
@@ -23,4 +24,28 @@ export function findSysFont(file: string): string | null {
   };
   for (const d of fontDirs()) { const hit = search(d, 2); if (hit) return hit; }
   return null;
+}
+
+// A face URL from the kit context (/sysfont/<file> or /<workspace path>) back to the file on disk.
+export function fontFileForUrl(root: string, url: string): string | null {
+  const file = url.startsWith("/sysfont/") ? findSysFont(url.slice("/sysfont/".length)) : path.join(root, url);
+  return file && fs.existsSync(file) ? file : null;
+}
+
+export interface GlyphSource { hasGlyphForCodePoint(codePoint: number): boolean }
+export type GlyphCache = Map<string, GlyphSource[]>;
+
+// Opens a font file once per cache; a collection yields each of its fonts. Unreadable files yield none.
+export function openGlyphSources(file: string, cache: GlyphCache): GlyphSource[] {
+  let fonts = cache.get(file);
+  if (!fonts) {
+    try {
+      const f = fontkit.openSync(file);
+      fonts = "fonts" in f ? f.fonts : [f];
+    } catch {
+      fonts = [];
+    }
+    cache.set(file, fonts);
+  }
+  return fonts;
 }
