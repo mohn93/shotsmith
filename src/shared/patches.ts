@@ -22,8 +22,9 @@ export function installPatches(): void {
     set.add(v);
     m.set(canvas, set);
   };
-  // Text drawn after ready() was never checked: make the renderer's after-ready comparison fail.
-  const drawnAfterReady = () => { if ((window as { __ready?: boolean }).__ready) (window as { __shotsmithDomHash?: string }).__shotsmithDomHash = "canvas-text-after-ready"; };
+  // Text drawn once ready() starts collecting evidence (__shotsmithSealed) is never checked: make the renderer's
+  // after-ready comparison fail.
+  const drawnAfterReady = () => { if ((window as { __shotsmithSealed?: boolean }).__shotsmithSealed) (window as { __shotsmithDomHash?: string }).__shotsmithDomHash = "canvas-text-after-ready"; };
   const imageUrl = (src: unknown): string | null => {
     if (typeof HTMLImageElement !== "undefined" && src instanceof HTMLImageElement) return src.currentSrc || src.src || null;
     if (typeof SVGImageElement !== "undefined" && src instanceof SVGImageElement) return src.href.baseVal ? new URL(src.href.baseVal, document.baseURI).href : null;

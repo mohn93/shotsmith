@@ -41,6 +41,11 @@ export async function ready(): Promise<void> {
   try {
     await settle();
     const c = ctx();
+    // The page text is fixed here, before evidence is collected: the renderer compares this hash after the screenshot,
+    // so text added while collection awaits (or later) is caught. From here on canvas text also counts as after ready().
+    // Both lines run in one task, so no page script runs between them.
+    window.__shotsmithDomHash = domHash(pageText());
+    window.__shotsmithSealed = true;
     const { texts, claimsShown, generated } = await collectEvidence();
     window.__shotsmithSidecar = {
       page: c.page, target: c.target.name, locale: c.locale.code, kit: true,
@@ -48,8 +53,6 @@ export async function ready(): Promise<void> {
       lifts: state.lifts, warnings: state.warnings, generated, claimsShown,
     };
     window.__ready = true;
-    // The renderer compares this after the screenshot to catch text added after ready().
-    window.__shotsmithDomHash = domHash(pageText());
   } catch (e) {
     fail(e);
   }

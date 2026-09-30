@@ -142,6 +142,26 @@ describe("bypass routes: captures, sidecars and exports", () => {
     expectRule(r, "render.changedAfterReady", "late");
   });
 
+  // ready() not awaited: text arrives while ready() is still collecting evidence (the SVG background makes it fetch).
+  // Wherever the timing lands, it must be caught: as untraced text, or as a change after ready().
+  const RACE_BG = `s.root.style.backgroundImage = "url(/pages/bg.svg)"; ready(); await new Promise((r) => setTimeout(r, 32));`;
+  const raceText = page(HEADLINE, { extra: `${RACE_BG} const x = document.createElement("div"); x.textContent = "Free forever"; x.style.cssText = "position:absolute;left:80px;top:900px;font-size:60px;color:#fff"; s.root.appendChild(x);` });
+  const raceCanvas = page(HEADLINE, { extra: `const cv = document.createElement("canvas"); cv.width = 600; cv.height = 120; cv.style.cssText = "position:absolute;left:80px;top:900px"; s.root.appendChild(cv);
+    ${RACE_BG} const x = cv.getContext("2d"); x.font = "40px sans-serif"; x.fillStyle = "#fff"; x.fillText("Free forever", 10, 60);` });
+  for (let run = 1; run <= 5; run++) {
+    it.concurrent(`catches text and canvas text added while ready() collects evidence (run ${run})`, async () => {
+      const ws = await workspace("race-text", { html: raceText, config: (c) => { c.pages = ["race-text", "race-canvas"]; } });
+      fs.writeFileSync(`${ws}/pages/race-canvas.html`, raceCanvas);
+      fs.writeFileSync(`${ws}/pages/bg.svg`, `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="2" fill="#fff"/></svg>`);
+      const r = await cli(ws, "build");
+      expect(r.code, JSON.stringify(r.findings)).toBe(1);
+      for (const name of ["race-text", "race-canvas"]) {
+        const caught = r.findings.filter((f) => f.page === name && (f.rule === "claims.untraced" || f.rule === "render.changedAfterReady"));
+        expect(caught.length, `${name}: ${JSON.stringify(r.findings)}`).toBeGreaterThan(0);
+      }
+    });
+  }
+
   it("gives render.corrupt from check for a truncated sidecar", async () => {
     const ws = await workspace("screen", { target: "android-phone" });
     expect((await cli(ws, "build")).code).toBe(0);

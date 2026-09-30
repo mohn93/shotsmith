@@ -3,7 +3,7 @@ import { installPatches } from "../shared/patches.js";
 import type { KitSidecar, SidecarDevice } from "../shared/sidecar.js";
 
 declare global {
-  interface Window { __ready?: boolean; __shotsmithError?: string; __shotsmithSidecar?: KitSidecar; __shotsmithDomHash?: string }
+  interface Window { __ready?: boolean; __shotsmithError?: string; __shotsmithSidecar?: KitSidecar; __shotsmithDomHash?: string; __shotsmithSealed?: boolean }
 }
 
 export const LOGICAL_WIDTH = 1260;
