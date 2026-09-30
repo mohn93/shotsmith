@@ -1,4 +1,4 @@
-import { type SidecarFont, type SidecarText, domHash } from "../shared/sidecar.js";
+import { type SidecarFont, type SidecarText, domHash, pageText } from "../shared/sidecar.js";
 import { ctx, fail, state } from "./runtime.js";
 
 function visible(el: Element): boolean {
@@ -94,7 +94,7 @@ export async function ready(): Promise<void> {
     };
     window.__ready = true;
     // The renderer compares this after the screenshot to catch text added after ready().
-    window.__shotsmithDomHash = domHash(document.body.innerHTML);
+    window.__shotsmithDomHash = domHash(pageText());
   } catch (e) {
     fail(e);
   }

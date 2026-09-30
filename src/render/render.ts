@@ -6,7 +6,7 @@ import { loadClaims } from "../config/claims.js";
 import { type ResolvedConfig, loadConfig } from "../config/schema.js";
 import { kitDir } from "../shared/paths.js";
 import type { KitContext } from "../shared/context.js";
-import { type KitSidecar, type Sidecar, domHash, emptySidecar, sidecarPath } from "../shared/sidecar.js";
+import { type KitSidecar, type Sidecar, domHash, emptySidecar, pageText, sidecarPath } from "../shared/sidecar.js";
 import { launch } from "./browser.js";
 import { buildContext } from "./context.js";
 import { type GlyphCache, fontFileForUrl, openGlyphSources } from "./fonts.js";
@@ -46,7 +46,9 @@ export async function openRenderer(cfg: ResolvedConfig, opts: { timeoutMs?: numb
 const inside = (dir: string, p: string) => path.resolve(p).startsWith(path.resolve(dir) + path.sep);
 
 // Thrown by bounded() when a browser call does not settle within the renderer timeout.
-class PageStuck extends Error {}
+class PageStuck extends Error {
+  constructor(public ms: number) { super(`no answer within ${ms} ms`); }
+}
 
 // Resolves true if p settles within ms, false otherwise.
 async function settlesWithin(p: Promise<unknown>, ms: number): Promise<boolean> {
@@ -58,7 +60,7 @@ async function settlesWithin(p: Promise<unknown>, ms: number): Promise<boolean> 
 // Every call into the page is raced against the renderer timeout: a page stuck in a loop never answers.
 async function bounded<T>(r: Renderer, p: Promise<T>, ms = r.timeoutMs): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
-  const late = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new PageStuck()), ms); });
+  const late = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new PageStuck(ms)), ms); });
   try { return await Promise.race([p, late]); } finally { clearTimeout(timer); }
 }
 
@@ -69,7 +71,7 @@ async function closeTab(tab: Page): Promise<void> {
 }
 
 function renderFailure(r: Renderer, e: unknown, label: string, logs: string[]): unknown {
-  if (e instanceof PageStuck) return new RenderError(`${label}: page stopped responding after ${r.timeoutMs / 1000}s`, logs);
+  if (e instanceof PageStuck) return new RenderError(`${label}: page stopped responding after ${e.ms / 1000}s`, logs);
   return e;
 }
 
@@ -84,13 +86,49 @@ function targetOf(r: Renderer, name: string) {
 
 interface OpenedPage { tab: Page; pageError: Promise<Error>; requests: Sidecar["requests"] }
 
-function recordRequest(requests: Sidecar["requests"], origin: string, url: string, font: boolean): void {
-  let where = url;
+// The render server answers on both host names (see server.ts).
+const serverHosts = (serverUrl: string): Set<string> => {
+  const { port } = new URL(serverUrl);
+  return new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+};
+
+// Names each path segment under dir with its on-disk spelling (case-insensitive file systems accept any casing).
+function diskCase(dir: string, segments: string[]): string[] {
+  const out: string[] = [];
+  for (const seg of segments) {
+    let name = seg;
+    try {
+      const entries = fs.readdirSync(dir);
+      if (!entries.includes(seg)) name = entries.find((e) => e.toLowerCase() === seg.toLowerCase()) ?? seg;
+    } catch { /* not a directory, or missing: keep the requested spelling */ }
+    out.push(name);
+    dir = path.join(dir, name);
+  }
+  return out;
+}
+
+// Resolves a same-server request exactly as server.ts does, so /pages/..%2Finputs/x, /Inputs/x and the localhost
+// host name are all seen as the capture they load. Returns /inputs/<platform>/... or null.
+function captureOf(root: string, pathname: string): string | null {
+  if (pathname.startsWith("/__shotsmith/") || pathname.startsWith("/sysfont/")) return null;
+  const rel = path.relative(root, path.resolve(root, "." + pathname));
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+  const [top, ...rest] = rel.split(path.sep);
+  if (top.toLowerCase() !== "inputs" || !rest.length) return null;
+  const inputs = diskCase(root, [top])[0];
+  return `/inputs/${diskCase(path.join(root, inputs), rest).join("/")}`;
+}
+
+function recordRequest(requests: Sidecar["requests"], hosts: Set<string>, root: string, url: string, font: boolean): void {
+  let where = url, capture: string | null = null;
   try {
     const u = new URL(url);
-    if (u.origin === origin) where = decodeURIComponent(u.pathname);
+    if ((u.protocol === "http:") && hosts.has(u.host)) {
+      where = decodeURIComponent(u.pathname);
+      capture = captureOf(root, where);
+    }
   } catch { /* keep the raw URL */ }
-  if (where.startsWith("/inputs/") && !requests.captures.includes(where)) requests.captures.push(where);
+  if (capture && !requests.captures.includes(capture)) requests.captures.push(capture);
   if (font && !requests.fonts.includes(where)) requests.fonts.push(where);
 }
 
@@ -104,7 +142,8 @@ async function openPage(r: Renderer, job: RenderJob, label: string, logs: string
   const requests: Sidecar["requests"] = { captures: [], fonts: [] };
   tab.on("console", (m) => logs.push(`[${m.type()}] ${m.text()}`));
   tab.on("pageerror", (e) => { logs.push(`[pageerror] ${e.message}`); onError(e); });
-  tab.on("request", (req) => recordRequest(requests, r.server.url, req.url(), req.resourceType() === "font"));
+  const hosts = serverHosts(r.server.url), root = path.resolve(r.cfg.root);
+  tab.on("request", (req) => recordRequest(requests, hosts, root, req.url(), req.resourceType() === "font"));
   const q = `t=${encodeURIComponent(job.target)}&l=${encodeURIComponent(job.locale)}`;
   try {
     const res = await tab.goto(`${r.server.url}/pages/${job.page}.html?${q}`, { waitUntil: "load", timeout: r.timeoutMs }).catch((e) => {
@@ -208,18 +247,21 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
   const tab = opened.tab;
   try {
     await waitForPage(r, opened, () => (window as any).__ready === true || typeof (window as any).__shotsmithError === "string", "set window.__ready", label, logs);
-    fs.mkdirSync(path.dirname(job.out), { recursive: true });
-    await bounded(r, tab.screenshot({ path: job.out, clip: { x: 0, y: 0, width: t.w, height: t.h } }));
-    const [raw, html, readyHash] = await bounded(r, tab.evaluate(() => [
-      (window as any).__shotsmithSidecar ?? null, document.body?.innerHTML ?? "", (window as any).__shotsmithDomHash ?? null,
-    ] as const)) as [KitSidecar | null, string, string | null];
+    const png = await bounded(r, tab.screenshot({ type: "png", clip: { x: 0, y: 0, width: t.w, height: t.h } }));
+    const [raw, readyHash] = await bounded(r, tab.evaluate(() => [
+      (window as any).__shotsmithSidecar ?? null, (window as any).__shotsmithDomHash ?? null,
+    ] as const)) as [KitSidecar | null, string | null];
+    const text = await bounded(r, tab.evaluate(pageText));
     const sidecar: Sidecar = raw
-      ? { ...raw, page: job.page, target: job.target, locale: job.locale, kit: true, requests: opened.requests, changedAfterReady: readyHash !== null && readyHash !== domHash(html) }
+      ? { ...raw, page: job.page, target: job.target, locale: job.locale, kit: true, requests: opened.requests, changedAfterReady: readyHash !== null && readyHash !== domHash(text) }
       : { ...emptySidecar(job.page, job.target, job.locale, "kit.unused: page did not use the kit; its text and fonts were not checked"), requests: opened.requests };
     if (sidecar.texts.length) {
       const c = buildContext(loadConfig(r.cfg.root), loadClaims(r.cfg.root), job.target, job.locale, job.page);
       await bounded(r, applyCoverage(tab, sidecar, c.fonts, r.cfg.root, new Map()));
     }
+    // The image and its sidecar are written together, only once everything passed.
+    fs.mkdirSync(path.dirname(job.out), { recursive: true });
+    fs.writeFileSync(job.out, png);
     fs.writeFileSync(sidecarFile, JSON.stringify(sidecar, null, 2) + "\n");
     return { ...job, sidecar, sidecarPath: sidecarFile, logs, ms: Date.now() - started };
   } catch (e) {

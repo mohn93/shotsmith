@@ -113,13 +113,17 @@ describe("renderer", () => {
     const ws = tmpWorkspace("basic");
     await withRenderer(ws, async (r) => {
       const started = Date.now();
+      let loopSettled = false;
       const loop = renderPage(r, { page: "loop", target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", "loop") })
-        .then(() => "rendered", (e: Error) => ({ message: e.message, ms: Date.now() - started }));
+        .then(() => "rendered", (e: Error) => ({ message: e.message, ms: Date.now() - started }))
+        .finally(() => { loopSettled = true; });
       const plain = await renderPage(r, { page: "plain", target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", "plain") });
-      expect(Date.now() - started).toBeLessThan(5000);
+      // The other page finished while the stuck one was still waiting.
+      expect(loopSettled).toBe(false);
       expect(plain.sidecar.page).toBe("plain");
       const failed = await loop;
-      expect(failed).toMatchObject({ message: expect.stringMatching(/^loop \(android-phone, en\): page stopped responding after 5s/) });
+      // The ready wait allows Playwright's own timeout (5 s) 2 s to fire first, so the real limit is 7 s.
+      expect(failed).toMatchObject({ message: expect.stringMatching(/^loop \(android-phone, en\): page stopped responding after 7s/) });
       expect((failed as { ms: number }).ms).toBeLessThan(20000);
       // The renderer keeps working after closing a stuck page.
       const again = await renderPage(r, { page: "plain", target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", "plain") });
@@ -181,6 +185,19 @@ describe("renderer", () => {
     const { sidecar } = await withRenderer(ws, (r) => renderPage(r, { page: "late-text", target: "iphone-6.9", locale: "en", out: outPath(r.cfg, "en", "iphone-6.9", "late-text") }));
     expect(sidecar.kit).toBe(true);
     expect(sidecar.changedAfterReady).toBe(true);
+    // A style or class change after ready() is not a text change.
+    fs.writeFileSync(`${ws}/pages/late-style.html`, `<!doctype html><body><script type="module">
+      import { stage, ready } from "shotsmith/kit";
+      const s = await stage();
+      const p = document.createElement("p");
+      p.textContent = "Same words";
+      s.root.append(p);
+      await ready();
+      p.style.color = "red";
+      p.className = "late";</script></body></html>`);
+    const styled = await withRenderer(ws, (r) => renderPage(r, { page: "late-style", target: "iphone-6.9", locale: "en", out: outPath(r.cfg, "en", "iphone-6.9", "late-style") }));
+    expect(styled.sidecar.kit).toBe(true);
+    expect(styled.sidecar.changedAfterReady).toBe(false);
     const kit = tmpWorkspace("kit");
     const texts = await withRenderer(kit, (r) => renderPage(r, { page: "texts", target: "iphone-6.9", locale: "en", out: outPath(r.cfg, "en", "iphone-6.9", "texts") }));
     expect(texts.sidecar.changedAfterReady).toBe(false);
@@ -194,6 +211,33 @@ describe("renderer", () => {
     const { sidecar } = await withRenderer(ws, (r) => renderPage(r, { page: "cross-capture", target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", "cross-capture") }));
     expect(sidecar.requests.captures).toEqual(["/inputs/iphone/en/home.png"]);
     expect(sidecar.changedAfterReady).toBe(false);
+  });
+
+  it("records a capture however its URL is spelled", async () => {
+    const ws = tmpWorkspace("basic");
+    fs.mkdirSync(`${ws}/inputs/iphone/en`, { recursive: true });
+    await sharp({ create: { width: 4, height: 4, channels: 3, background: "#00f" } }).png().toFile(`${ws}/inputs/iphone/en/home.png`);
+    const variants: Record<string, string> = {
+      encoded: `"/pages/..%2Finputs/iphone/en/home.png"`,
+      dotdot: `"/pages/../inputs/iphone/en/home.png"`,
+      localhost: `"http://localhost:" + location.port + "/inputs/iphone/en/home.png"`,
+    };
+    // Only case-insensitive file systems (macOS by default) serve a differently cased path.
+    const caseInsensitive = fs.existsSync(`${ws}/INPUTS/iphone/en/home.png`);
+    if (caseInsensitive) variants.cased = `"/Inputs/IPhone/en/Home.PNG"`;
+    for (const [name, src] of Object.entries(variants)) {
+      fs.writeFileSync(`${ws}/pages/${name}.html`, `<!doctype html><body><script>
+        const img = new Image();
+        img.onload = () => { window.__ready = true; };
+        img.onerror = () => { window.__shotsmithError = "capture did not load: " + img.src; };
+        img.src = ${src};</script></body></html>`);
+    }
+    await withRenderer(ws, async (r) => {
+      for (const name of Object.keys(variants)) {
+        const { sidecar } = await renderPage(r, { page: name, target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", name) });
+        expect(sidecar.requests.captures, name).toEqual(["/inputs/iphone/en/home.png"]);
+      }
+    });
   });
 
   it("renders from the CLI", () => {

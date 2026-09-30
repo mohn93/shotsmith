@@ -22,10 +22,24 @@ export interface Sidecar extends KitSidecar {
 // The sidecar sits next to its image as <name>.sidecar.json, so it never collides with a workspace file like claims.json.
 export const sidecarPath = (pngPath: string): string => pngPath.replace(/\.png$/, "") + ".sidecar.json";
 
-// A short hash of document.body.innerHTML; the kit stores it at ready() and the renderer compares after the screenshot.
-export function domHash(html: string): string {
+// The page's text: document.body plus open shadow roots. Self-contained, so the renderer can run it in the page.
+export function pageText(): string {
+  const parts: string[] = [];
+  const walk = (n: Node): void => {
+    if (n.nodeType === Node.TEXT_NODE) parts.push(n.nodeValue ?? "");
+    const shadow = (n as Element).shadowRoot;
+    if (shadow) walk(shadow);
+    for (let c = n.firstChild; c; c = c.nextSibling) walk(c);
+  };
+  if (document.body) walk(document.body);
+  return parts.join("");
+}
+
+// A short hash of pageText(); the kit stores it at ready() and the renderer compares after the screenshot, so text
+// added or changed after ready() is caught while style and class changes are not.
+export function domHash(text: string): string {
   let h = 0x811c9dc5;
-  for (let i = 0; i < html.length; i++) h = Math.imul(h ^ html.charCodeAt(i), 0x01000193);
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
