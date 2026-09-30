@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { exportPath } from "../checks/store.js";
+import { exportPath, refuseLinked } from "../checks/store.js";
 import type { ResolvedConfig } from "../config/schema.js";
 import { outPath } from "../render/render.js";
 
@@ -14,6 +14,7 @@ export async function thumbs(cfg: ResolvedConfig, o: { target: string; locale?: 
   const tiles = await Promise.all(files.map((f) => sharp(f).resize({ width }).toBuffer({ resolveWithObject: true })));
   const h = tiles[0].info.height;
   const out = path.join(cfg.root, "review", `${locale}-${o.target}-${width}.png`);
+  refuseLinked(cfg.root, out);
   fs.mkdirSync(path.dirname(out), { recursive: true });
   await sharp({ create: { width: gap + tiles.length * (width + gap), height: h + 2 * gap, channels: 3, background: "#ffffff" } })
     .composite(tiles.map((t, i) => ({ input: t.data, left: gap + i * (width + gap), top: gap }))).png().toFile(out);

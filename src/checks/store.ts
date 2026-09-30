@@ -34,6 +34,13 @@ export function reachedWithoutLinks(root: string, p: string): boolean {
   try { return fs.realpathSync(q) === path.join(fs.realpathSync(root), rel); } catch { return false; }
 }
 
+// Throws when writing or deleting p would pass through a link (see reachedWithoutLinks), naming the path.
+export function refuseLinked(root: string, p: string): void {
+  if (reachedWithoutLinks(root, p)) return;
+  const rel = path.relative(path.resolve(root), path.resolve(p));
+  throw new Error(`${rel} is reached through a symbolic link (or leaves the workspace); Shotsmith never writes or deletes through a link, so nothing lands outside the workspace. Replace the link with a real folder.`);
+}
+
 // Every regular image file under dir, without following links.
 function imagesUnder(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

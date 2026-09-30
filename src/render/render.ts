@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as fontkit from "fontkit";
 import { type Browser, type Page, errors } from "playwright";
+import { refuseLinked } from "../checks/store.js";
 import { loadClaims } from "../config/claims.js";
 import { type ResolvedConfig, loadConfig } from "../config/schema.js";
 import { isAppleOnlyFontName } from "../config/targets.js";
@@ -17,7 +18,9 @@ import { type RenderServer, resolveInside, startServer } from "./server.js";
 
 export interface Renderer { cfg: ResolvedConfig; browser: Browser; server: RenderServer; timeoutMs: number; close(): Promise<void> }
 export interface RenderJob { page: string; target: string; locale: string; out: string }
-export interface RenderResult extends RenderJob { sidecar: Sidecar; sidecarPath: string; logs: string[]; ms: number }
+// sidecarPath is null when the image was written outside the workspace (an explicit -o): only that image is written,
+// and sidecarSkipped says why.
+export interface RenderResult extends RenderJob { sidecar: Sidecar; sidecarPath: string | null; sidecarSkipped?: string; logs: string[]; ms: number }
 
 export class RenderError extends Error {
   constructor(message: string, public logs: string[]) { super(logs.length ? `${message}\n${logs.slice(-20).join("\n")}` : message); }
@@ -327,10 +330,14 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
   if (!r.cfg.locales.some((l) => l.code === job.locale)) throw new Error(`Unknown locale "${job.locale}"`);
   // The sidecar is written next to the image as <name>.sidecar.json, so the image must be a .png.
   if (!/\.png$/.test(job.out)) throw new Error(`Render output must be a .png file, got ${job.out}`);
-  const sidecarFile = sidecarPath(job.out);
+  // Inside the workspace nothing is written or deleted through a link. An explicit -o file outside the workspace is
+  // the only thing written there: its sidecar is not.
+  const inWorkspace = inside(r.cfg.root, job.out);
+  const sidecarFile = inWorkspace ? sidecarPath(job.out) : null;
+  if (sidecarFile) { refuseLinked(r.cfg.root, job.out); refuseLinked(r.cfg.root, sidecarFile); }
   // A failed render must not leave the previous image and sidecar behind for check to pass on. Only Shotsmith's own
   // out/ is cleared up front; an explicit -o file elsewhere is only ever overwritten by a finished render.
-  if (inside(path.join(r.cfg.root, "out"), job.out)) {
+  if (sidecarFile && inside(path.join(r.cfg.root, "out"), job.out)) {
     fs.rmSync(job.out, { force: true });
     fs.rmSync(sidecarFile, { force: true });
   }
@@ -358,6 +365,10 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
     // The image and its sidecar are written together, only once everything passed.
     fs.mkdirSync(path.dirname(job.out), { recursive: true });
     fs.writeFileSync(job.out, png);
+    if (!sidecarFile) {
+      const sidecarSkipped = `${job.out} is outside the workspace, so only the image was written; its sidecar was not (check and claims read renders in out/)`;
+      return { ...job, sidecar, sidecarPath: null, sidecarSkipped, logs, ms: Date.now() - started };
+    }
     fs.writeFileSync(sidecarFile, JSON.stringify(sidecar, null, 2) + "\n");
     return { ...job, sidecar, sidecarPath: sidecarFile, logs, ms: Date.now() - started };
   } catch (e) {
@@ -370,6 +381,7 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
 // Video contract: the page defines window.__seek = async (seconds) => { ...draw that moment... }.
 export async function renderVideo(r: Renderer, job: RenderJob, opts: { fps: number; duration: number }): Promise<void> {
   const t = targetOf(r, job.target);
+  if (inside(r.cfg.root, job.out)) refuseLinked(r.cfg.root, job.out);
   const logs: string[] = [];
   const label = `${job.page} (${job.target}, ${job.locale})`;
   const opened = await openPage(r, job, label, logs);

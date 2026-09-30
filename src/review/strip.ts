@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
+import { refuseLinked } from "../checks/store.js";
 import type { ResolvedConfig } from "../config/schema.js";
 import { outPath } from "../render/render.js";
 
@@ -33,10 +34,11 @@ export async function strip(cfg: ResolvedConfig, o: { target: string; locale?: s
   const raws = await Promise.all(files.map((f) => sharp(f).removeAlpha().raw().toBuffer()));
   const seams = raws.slice(0, -1).map((b, i) => ({ between: [cfg.pages[i], cfg.pages[i + 1]] as [string, string], steps: seamSteps(b, raws[i + 1], t.w, t.h) }));
   const file = path.join(cfg.root, "review", `strip-${locale}-${t.name}.jpg`);
+  const preview = file.replace(/\.jpg$/, "-preview.jpg");
+  for (const f of [file, preview]) refuseLinked(cfg.root, f);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   await sharp({ create: { width: t.w * files.length, height: t.h, channels: 3, background: "#000" } })
     .composite(files.map((input, i) => ({ input, left: i * t.w, top: 0 }))).jpeg({ quality: 90 }).toFile(file);
-  const preview = file.replace(/\.jpg$/, "-preview.jpg");
   await sharp(file).resize({ width: 2400 }).jpeg({ quality: 88 }).toFile(preview);
   return { file, preview, seams };
 }

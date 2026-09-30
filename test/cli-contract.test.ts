@@ -121,6 +121,47 @@ describe("cli contract", () => {
     expect(JSON.parse(r.out)).toMatchObject({ ok: true, out: `${ws}/rel.png`, sidecar: `${ws}/rel.sidecar.json`, warnings: expect.any(Array), ms: expect.any(Number) });
   });
 
+  it("refuses to render or build through a linked out/ folder, with exit 2, and writes nothing there", () => {
+    const ws = tmpWorkspace("basic"), outside = tempDir("contract-outside-");
+    fs.symlinkSync(outside, `${ws}/out`, "dir");
+    for (const args of [["build"], ["render", "plain"]]) {
+      const r = run([...args, "--json", "-C", ws]);
+      expect(r.code, args.join(" ")).toBe(2);
+      expect(JSON.parse(r.out).error.message, args.join(" ")).toMatch(/^out\/.* is reached through a symbolic link/);
+    }
+    // A link deeper down (out/en) is refused the same way.
+    fs.unlinkSync(`${ws}/out`);
+    fs.mkdirSync(`${ws}/out`);
+    fs.symlinkSync(outside, `${ws}/out/en`, "dir");
+    const deep = run(["render", "plain", "--json", "-C", ws]);
+    expect(deep.code).toBe(2);
+    expect(JSON.parse(deep.out).error.message).toMatch(/^out\/en\/.* is reached through a symbolic link/);
+    expect(fs.readdirSync(outside)).toEqual([]);
+  });
+
+  it("refuses to write thumbs and strips through a linked review/ folder, with exit 2", async () => {
+    const ws = await renderedStrip(20), outside = tempDir("contract-outside-");
+    fs.symlinkSync(outside, `${ws}/review`, "dir");
+    for (const cmd of ["thumbs", "strip"]) {
+      const r = run([cmd, "android-phone", "--json", "-C", ws]);
+      expect(r.code, cmd).toBe(2);
+      expect(JSON.parse(r.out).error.message, cmd).toMatch(/^review\/.* is reached through a symbolic link/);
+    }
+    expect(fs.readdirSync(outside)).toEqual([]);
+  });
+
+  it("writes only the image for render -o outside the workspace, and says the sidecar was skipped", () => {
+    const ws = tmpWorkspace("basic"), outside = tempDir("contract-outside-");
+    const r = run(["render", "plain", "-C", ws, "-o", `${outside}/shot.png`, "--json"]);
+    expect(r.code).toBe(0);
+    expect(fs.readdirSync(outside)).toEqual(["shot.png"]);
+    expect(JSON.parse(r.out)).toMatchObject({ ok: true, out: `${outside}/shot.png`, sidecar: null, sidecarSkipped: expect.stringMatching(/outside the workspace/) });
+    const human = run(["render", "plain", "-C", ws, "-o", `${outside}/again.png`]);
+    expect(human.code).toBe(0);
+    expect(human.out).toMatch(/sidecar not written: .*outside the workspace/);
+    expect(fs.readdirSync(outside).sort()).toEqual(["again.png", "shot.png"]);
+  });
+
   it("reports thumbs as { ok, file }", async () => {
     const ws = await renderedStrip(20);
     const r = run(["thumbs", "android-phone", "--json", "-C", ws]);

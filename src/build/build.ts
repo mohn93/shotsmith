@@ -4,11 +4,12 @@ import { checkClaims } from "../checks/claims.js";
 import { type Finding, type Where, err, formatFinding } from "../checks/findings.js";
 import { checkInputs } from "../checks/inputs.js";
 import { checkSidecars, loadSidecars } from "../checks/sidecars.js";
-import { checkExports, exportPath, reachedWithoutLinks, staleOutputs } from "../checks/store.js";
+import { checkExports, exportPath, reachedWithoutLinks, refuseLinked, staleOutputs } from "../checks/store.js";
 import { loadClaims } from "../config/claims.js";
 import type { ResolvedConfig } from "../config/schema.js";
 import { type RenderJob, type RenderResult, openRenderer, outPath, renderPage } from "../render/render.js";
 import { version } from "../shared/paths.js";
+import { sidecarPath } from "../shared/sidecar.js";
 import { contactSheet, encodeJpeg } from "./export.js";
 
 export interface BuildOptions { targets?: string[]; locales?: string[]; jobs?: number }
@@ -35,6 +36,8 @@ export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<
   const locales = cfg.locales.filter((l) => !o.locales?.length || o.locales.includes(l.code));
   const jobs: RenderJob[] = locales.flatMap((l) => targets.flatMap((t) => cfg.pages.map((page) => ({ page, target: t.name, locale: l.code, out: outPath(cfg, l.code, t.name, page) }))));
   const rendered: RenderResult[] = [], failures: BuildResult["failures"] = [];
+  // Renders are never written or cleared through a linked out/ folder: refuse the whole build up front.
+  for (const j of jobs) { refuseLinked(cfg.root, j.out); refuseLinked(cfg.root, sidecarPath(j.out)); }
 
   const r = await openRenderer(cfg);
   try {

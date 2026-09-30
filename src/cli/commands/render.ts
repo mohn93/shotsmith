@@ -27,8 +27,12 @@ export function registerRender(program: Command) {
       try {
         if (o.video) { await renderVideo(r, { page, target, locale, out }, { fps, duration }); console.log(g.json ? JSON.stringify({ ok: true, out }) : `wrote ${out}`); return; }
         const res = await renderPage(r, { page, target, locale, out });
-        if (g.json) console.log(JSON.stringify({ ok: true, out, sidecar: res.sidecarPath, warnings: res.sidecar.warnings, ms: res.ms }));
-        else { console.log(`wrote ${out} (${res.ms} ms)`); for (const w of res.sidecar.warnings) console.log(`warn ${w}`); }
+        if (g.json) console.log(JSON.stringify({ ok: true, out, sidecar: res.sidecarPath, ...(res.sidecarSkipped ? { sidecarSkipped: res.sidecarSkipped } : {}), warnings: res.sidecar.warnings, ms: res.ms }));
+        else {
+          console.log(`wrote ${out} (${res.ms} ms)`);
+          if (res.sidecarSkipped) console.log(`sidecar not written: ${res.sidecarSkipped}`);
+          for (const w of res.sidecar.warnings) console.log(`warn ${w}`);
+        }
       } finally { await r.close(); }
     });
 }

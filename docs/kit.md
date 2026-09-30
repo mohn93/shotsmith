@@ -164,7 +164,8 @@ Needs `three` (0.160 or newer) in the workspace's `node_modules` (`npm install t
 
 ## Output and build
 
-- `shotsmith render` writes `out/<locale>/<target>/<page>.png` and a `.sidecar.json` next to it.
+- `shotsmith render` writes `out/<locale>/<target>/<page>.png` and a `.sidecar.json` next to it. With `-o` inside the workspace the sidecar goes next to that file; with `-o` outside the workspace only the image is written (the output says the sidecar was skipped).
+- `out/` and `review/` must be real folders: a link anywhere on the way makes `render`, `build`, `thumbs` and `strip` stop with exit 2 instead of writing or deleting through it.
 - `shotsmith build` renders everything, writes JPEGs to `export/<locale>/<target>/<page>.jpg` (exact target size, opaque RGB, baseline JPEG, quality 92, chroma 4:4:4), contact sheets and `REPORT.md`, and runs every check.
 - The export folder (`output` in the config) must be a real folder inside the workspace. Links are refused (`store.linked`), and Shotsmith never writes or deletes through one.
 - Anything in the export folder that is not an export of a configured locale, target and page is a stale file and an error (`store.stale`). `build` deletes stale images and then folders of removed locales and targets that are left empty; other stale files it only reports. The only other files that belong in the export folder are `contact-sheets/<locale>-<target>.jpg`, `REPORT.md` and `upload-*.json`.

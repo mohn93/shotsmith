@@ -31,7 +31,7 @@ describe("renderer", () => {
       expect(res.sidecar.warnings[0]).toMatch(/did not use the kit/);
       expect(res.sidecarPath).toBe(sidecarPath(out));
       expect(res.sidecarPath).toMatch(/plain\.sidecar\.json$/);
-      expect(JSON.parse(fs.readFileSync(res.sidecarPath, "utf8")).page).toBe("plain");
+      expect(JSON.parse(fs.readFileSync(res.sidecarPath!, "utf8")).page).toBe("plain");
     });
   });
 
