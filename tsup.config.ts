@@ -18,5 +18,7 @@ export default defineConfig([
     clean: false,
     dts: true,
     external: ["three", /^three\//],
+    // The two entries share runtime state through a chunk; keep it inside dist/kit, the only directory the render server serves.
+    esbuildOptions(o) { o.chunkNames = "kit/[name]-[hash]"; },
   },
 ]);
