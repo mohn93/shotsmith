@@ -77,7 +77,7 @@ describe("renderer", () => {
     let res: { code: number; err: string } = { code: 0, err: "" };
     try { execFileSync("node", [`${ROOT}/dist/cli.js`, "render", "plain", "-C", ws, "-o", `${ws}/keep.jpg`], { encoding: "utf8", stdio: "pipe" }); }
     catch (e: any) { res = { code: e.status, err: String(e.stderr) }; }
-    expect(res.code).toBe(1);
+    expect(res.code).toBe(2);
     expect(res.err).toMatch(/--out must end in \.png/);
     expect(fs.readFileSync(`${ws}/keep.jpg`, "utf8")).toBe("keep");
     await withRenderer(ws, async (r) => {
@@ -92,9 +92,9 @@ describe("renderer", () => {
       try { execFileSync("node", [`${ROOT}/dist/cli.js`, "render", ...args, "-C", ws], { encoding: "utf8", stdio: "pipe" }); return { code: 0, err: "" }; }
       catch (e: any) { return { code: e.status as number, err: String(e.stderr) }; }
     };
-    expect(run("../plain")).toMatchObject({ code: 1, err: expect.stringMatching(/Page name "\.\.\/plain"/) });
-    expect(run("plain", "-l", "../../x")).toMatchObject({ code: 1, err: expect.stringMatching(/Unknown locale/) });
-    expect(run("plain", "-t", "../x")).toMatchObject({ code: 1, err: expect.stringMatching(/Unknown target/) });
+    expect(run("../plain")).toMatchObject({ code: 2, err: expect.stringMatching(/Page name "\.\.\/plain"/) });
+    expect(run("plain", "-l", "../../x")).toMatchObject({ code: 2, err: expect.stringMatching(/Unknown locale/) });
+    expect(run("plain", "-t", "../x")).toMatchObject({ code: 2, err: expect.stringMatching(/Unknown target/) });
     expect(fs.existsSync(`${ws}/out`)).toBe(false);
     await withRenderer(ws, async (r) => {
       await expect(renderPage(r, { page: "../pages/plain", target: "iphone-6.9", locale: "en", out: `${ws}/x.png` })).rejects.toThrow(/Page name/);

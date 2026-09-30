@@ -7,13 +7,15 @@ export function chromiumArgs(platform: NodeJS.Platform = process.platform): stri
     : ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl"];
 }
 
-export async function launch(): Promise<Browser> {
+export async function launch(platform: NodeJS.Platform = process.platform): Promise<Browser> {
   try {
-    return await chromium.launch({ args: chromiumArgs() });
+    return await chromium.launch({ args: chromiumArgs(platform) });
   } catch (e) {
-    if (/Executable doesn't exist|browserType\.launch/i.test((e as Error).message)) {
-      throw new Error("Chromium for Playwright is not installed. Run: npx playwright install chromium");
+    const message = e instanceof Error ? e.message : String(e);
+    if (message.includes("Executable doesn't exist")) {
+      const cmd = platform === "linux" ? "npx playwright install --with-deps chromium" : "npx playwright install chromium";
+      throw new Error(`Chromium for Playwright is not installed. Run: ${cmd}`);
     }
-    throw e;
+    throw new Error(`Chromium failed to start: ${message}`);
   }
 }

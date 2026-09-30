@@ -25,7 +25,7 @@ const cli = (ws: string, ...args: string[]) => {
 
 const cliErr = (ws: string, ...args: string[]) => {
   try { execFileSync("node", [`${ROOT}/dist/cli.js`, ...args, "-C", ws, "--json"], { encoding: "utf8", stdio: "pipe" }); return { code: 0, err: "" }; }
-  catch (e: any) { return { code: e.status as number, err: String(e.stderr) }; }
+  catch (e: any) { return { code: e.status as number, err: String(JSON.parse(String(e.stdout)).error.message) }; }
 };
 
 async function allCaptures(ws: string): Promise<void> {
@@ -97,15 +97,15 @@ describe("build", () => {
   it("rejects unknown targets and locales and invalid --jobs", () => {
     const ws = prepare();
     const t = cliErr(ws, "build", "-t", "iphone-69");
-    expect(t.code).not.toBe(0);
+    expect(t.code).toBe(2);
     expect(t.err).toMatch(/Unknown target\(s\): iphone-69/);
     const l = cliErr(ws, "build", "-l", "fr");
-    expect(l.code).not.toBe(0);
+    expect(l.code).toBe(2);
     expect(l.err).toMatch(/Unknown locale\(s\): fr/);
     const j = cliErr(ws, "build", "--jobs", "abc");
-    expect(j.code).not.toBe(0);
+    expect(j.code).toBe(2);
     expect(j.err).toMatch(/--jobs must be/);
-    expect(cliErr(ws, "build", "--jobs", "0").code).not.toBe(0);
+    expect(cliErr(ws, "build", "--jobs", "0").code).toBe(2);
     expect(fs.existsSync(`${ws}/export`)).toBe(false);
   });
 
