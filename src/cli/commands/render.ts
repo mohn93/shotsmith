@@ -15,8 +15,11 @@ export function registerRender(program: Command) {
     .option("--duration <s>", "video seconds", "6")
     .action(async (page: string, o, cmd: Command) => {
       const g = globals(cmd);
+      if (!/^[\w-]+$/.test(page)) throw new Error(`Page name "${page}" must use letters, digits, - and _ only; it names pages/<page>.html`);
       const cfg = loadConfig(g.cwd);
       const target = o.target ?? cfg.targets[0].name, locale = o.locale ?? cfg.defaultLocale;
+      if (!cfg.targets.some((t) => t.name === target)) throw new Error(`Unknown target "${target}"; configured: ${cfg.targets.map((t) => t.name).join(", ")}`);
+      if (!cfg.locales.some((l) => l.code === locale)) throw new Error(`Unknown locale "${locale}"; configured: ${cfg.locales.map((l) => l.code).join(", ")}`);
       const out = o.out ? path.resolve(o.out) : o.video ? outPath(cfg, locale, target, page).replace(/\.png$/, ".mp4") : outPath(cfg, locale, target, page);
       if (!o.video && !/\.png$/.test(out)) throw new Error(`--out must end in .png for a still render (its sidecar is written next to it as .json); got ${o.out}`);
       const r = await openRenderer(cfg);

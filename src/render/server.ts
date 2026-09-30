@@ -73,7 +73,14 @@ const inside = (root: string, p: string) => p === root || p.startsWith(root + pa
 
 export async function startServer(opts: { root: string; kitDir: string; context: (target: string, locale: string, page: string) => KitContext }): Promise<RenderServer> {
   const root = path.resolve(opts.root), kit = path.resolve(opts.kitDir);
+  // Set once the port is known. Requests naming any other host are refused, so a page on another site cannot reach
+  // the workspace through DNS rebinding.
+  let hosts = new Set<string>();
   const server = http.createServer((req, res) => {
+    if (!hosts.has((req.headers.host ?? "").toLowerCase())) {
+      res.writeHead(403);
+      return res.end();
+    }
     const notFound = () => {
       if (res.headersSent) {
         res.end();
@@ -114,5 +121,6 @@ export async function startServer(opts: { root: string; kitDir: string; context:
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const { port } = server.address() as { port: number };
+  hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   return { url: `http://127.0.0.1:${port}`, close: () => new Promise<void>((r) => server.close(() => r())) };
 }

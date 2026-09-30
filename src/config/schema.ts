@@ -22,7 +22,8 @@ const CustomTarget = z.object({
   formFactor: z.enum(["tall", "p916", "t43", "t916"]).optional(),
 });
 const Locale = z.object({
-  code: z.string().min(2),
+  // Locale codes become folder names under out/, export/ and inputs/.
+  code: z.string().min(2).regex(/^[A-Za-z0-9_-]+$/, "use letters, digits, - and _ only"),
   apple: z.string().optional(),
   play: z.string().optional(),
   dir: z.enum(["ltr", "rtl"]).default("ltr"),

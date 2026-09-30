@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -48,6 +49,17 @@ describe("render server", () => {
   it("refuses paths outside the workspace", async () => {
     expect((await fetch(`${server.url}/..%2f..%2fetc%2fpasswd`)).status).toBe(404);
     expect((await fetch(`${server.url}/pages`)).status).toBe(404);
+  });
+
+  it("refuses requests for any other host name (DNS rebinding)", async () => {
+    const status = (host: string) => new Promise<number>((resolve, reject) => {
+      http.get(`${server.url}/pages/a.html`, { headers: { host } }, (res) => { res.resume(); resolve(res.statusCode ?? 0); }).on("error", reject);
+    });
+    const port = new URL(server.url).port;
+    expect(await status(`evil.example:${port}`)).toBe(403);
+    expect(await status("127.0.0.1:1")).toBe(403);
+    expect(await status(`127.0.0.1:${port}`)).toBe(200);
+    expect(await status(`localhost:${port}`)).toBe(200);
   });
 
   it("returns 500 for malformed importmap JSON in a page", async () => {

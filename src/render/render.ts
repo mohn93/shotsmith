@@ -53,6 +53,7 @@ interface OpenedPage { tab: Page; pageError: Promise<Error> }
 
 async function openPage(r: Renderer, job: RenderJob, logs: string[]): Promise<OpenedPage> {
   const t = targetOf(r, job.target);
+  if (!/^[\w-]+$/.test(job.page)) throw new Error(`Page name "${job.page}" must use letters, digits, - and _ only`);
   const tab = await r.browser.newPage({ viewport: { width: t.w, height: t.h }, deviceScaleFactor: 1 });
   let onError: (e: Error) => void = () => {};
   const pageError = new Promise<Error>((res) => { onError = res; });

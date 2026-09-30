@@ -25,6 +25,11 @@ describe("loadConfig", () => {
     expect(cfg.targets[0]).toMatchObject({ name: "pixel", store: "play", formFactor: "p916" });
   });
 
+  it("rejects locale codes that are not plain folder names", () => {
+    for (const code of ["../x", "en/US", "a.b", ".."]) expect(() => loadConfig(ws({ ...base, locales: [{ code }] })), code).toThrow(/locales\.0\.code/);
+    expect(loadConfig(ws({ ...base, locales: [{ code: "pt-BR" }, { code: "zh_Hant" }] })).locales.map((l) => l.code)).toEqual(["pt-BR", "zh_Hant"]);
+  });
+
   it("rejects unknown targets with the list of built-ins", () => {
     expect(() => loadConfig(ws({ ...base, targets: ["iphone-99"] }))).toThrow(/iphone-99.*iphone-6\.9/s);
   });
