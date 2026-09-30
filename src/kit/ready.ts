@@ -20,11 +20,21 @@ function cssImageUrls(): string[] {
   return [...urls];
 }
 
+function shortUrl(u: string): string {
+  try {
+    const x = new URL(u, location.href);
+    return x.origin === location.origin ? x.pathname + x.search : u;
+  } catch { return u; }
+}
+
 async function settle(): Promise<void> {
   await Promise.all(state.pending);
   await document.fonts.ready;
-  await Promise.all(Array.from(document.images).map((i) => i.decode().catch(() => undefined)));
-  await Promise.all(cssImageUrls().map((u) => { const i = new Image(); i.src = u; return i.decode().catch(() => undefined); }));
+  const failed: string[] = [];
+  const imgs = Array.from(document.images).filter((i) => i.getAttribute("src"));
+  await Promise.all(imgs.map((i) => i.decode().catch(() => { failed.push(shortUrl(i.getAttribute("src")!)); })));
+  await Promise.all(cssImageUrls().map((u) => { const i = new Image(); i.src = u; return i.decode().catch(() => { failed.push(shortUrl(u)); }); }));
+  if (failed.length) throw new Error(`Image failed to load: ${[...new Set(failed)].join(", ")}`);
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 }
 

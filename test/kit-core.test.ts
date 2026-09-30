@@ -32,8 +32,20 @@ describe("kit core", () => {
     fs.writeFileSync(`${ws}/pages/bad.html`, `<!doctype html><body><script type="module">
       import { stage, t, ready } from "shotsmith/kit";
       const s = await stage();
-      document.title = document.documentElement.lang + "|" + document.documentElement.dir;
       t("nope"); await ready();</script></body>`);
     await expect(render(ws, "bad", "android-phone", "ar")).rejects.toThrow(/Unknown claim "nope"/);
+  });
+
+  it("fails the render when an image does not load", async () => {
+    const ws = tmpWorkspace("kit");
+    const fs = await import("node:fs");
+    fs.writeFileSync(`${ws}/pages/img.html`, `<!doctype html><body><script type="module">
+      import { stage, ready } from "shotsmith/kit";
+      const s = await stage();
+      const i = document.createElement("img");
+      i.src = "/missing.png";
+      s.root.appendChild(i);
+      await ready();</script></body>`);
+    await expect(render(ws, "img", "android-phone", "en")).rejects.toThrow(/Image failed to load: \/missing\.png/);
   });
 });
