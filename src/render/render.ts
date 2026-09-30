@@ -28,8 +28,17 @@ export async function openRenderer(cfg: ResolvedConfig, opts: { timeoutMs?: numb
     // Re-read config and claims per request so edits show up without restarting.
     context: (t, l, p) => buildContext(loadConfig(cfg.root), loadClaims(cfg.root), t, l, p),
   });
-  const browser = await launch();
-  return { cfg, browser, server, timeoutMs: opts.timeoutMs ?? 90000, close: async () => { await browser.close(); await server.close(); } };
+  let browser: Browser;
+  try {
+    browser = await launch();
+  } catch (e) {
+    await server.close();
+    throw e;
+  }
+  return {
+    cfg, browser, server, timeoutMs: opts.timeoutMs ?? 90000,
+    close: async () => { try { await browser.close(); } finally { await server.close(); } },
+  };
 }
 
 function targetOf(r: Renderer, name: string) {
@@ -44,7 +53,13 @@ async function openPage(r: Renderer, job: RenderJob, logs: string[]): Promise<Pa
   tab.on("console", (m) => logs.push(`[${m.type()}] ${m.text()}`));
   tab.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
   const q = `t=${encodeURIComponent(job.target)}&l=${encodeURIComponent(job.locale)}`;
-  await tab.goto(`${r.server.url}/pages/${job.page}.html?${q}`, { waitUntil: "load" });
+  try {
+    const res = await tab.goto(`${r.server.url}/pages/${job.page}.html?${q}`, { waitUntil: "load" });
+    if (res?.status() === 404) throw new RenderError(`pages/${job.page}.html not found`, logs);
+  } catch (e) {
+    await tab.close();
+    throw e;
+  }
   return tab;
 }
 
@@ -99,18 +114,38 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
 export async function renderVideo(r: Renderer, job: RenderJob, opts: { fps: number; duration: number }): Promise<void> {
   const t = targetOf(r, job.target);
   const logs: string[] = [];
+  const label = `${job.page} (${job.target}, ${job.locale})`;
   const tab = await openPage(r, job, logs);
   try {
-    await tab.waitForFunction(() => typeof (window as any).__seek === "function", null, { timeout: r.timeoutMs });
+    try {
+      await tab.waitForFunction(() => typeof (window as any).__seek === "function" || typeof (window as any).__shotsmithError === "string", null, { timeout: r.timeoutMs });
+    } catch {
+      throw new RenderError(`${label} did not define window.__seek within ${r.timeoutMs / 1000}s`, logs);
+    }
+    const pageError = await tab.evaluate(() => (window as any).__shotsmithError as string | undefined);
+    if (pageError) throw new RenderError(`${label}: ${pageError}`, logs);
     fs.mkdirSync(path.dirname(job.out), { recursive: true });
     const ff = spawn("ffmpeg", ["-y", "-f", "image2pipe", "-framerate", String(opts.fps), "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", job.out], { stdio: ["pipe", "ignore", "inherit"] });
-    const done = new Promise<number>((res, rej) => { ff.on("close", (code) => res(code ?? 1)); ff.on("error", rej); });
-    for (let f = 0; f < Math.round(opts.fps * opts.duration); f++) {
+    let exited = false;
+    let failure: RenderError | null = null;
+    const done = new Promise<number>((res) => {
+      ff.on("error", (e) => { failure = new RenderError(`ffmpeg is not installed or failed to start: ${e.message}`, logs); exited = true; res(1); });
+      ff.on("close", (code) => { exited = true; res(code ?? 1); });
+    });
+    // A dead ffmpeg closes the pipe; the exit code reports it, so the write error itself is ignored.
+    ff.stdin.on("error", () => {});
+    for (let f = 0; f < Math.round(opts.fps * opts.duration) && !exited; f++) {
       await tab.evaluate((s) => (window as any).__seek(s), f / opts.fps);
-      ff.stdin.write(await tab.screenshot({ type: "png", clip: { x: 0, y: 0, width: t.w, height: t.h } }));
+      const frame = await tab.screenshot({ type: "png", clip: { x: 0, y: 0, width: t.w, height: t.h } });
+      if (exited) break;
+      if (!ff.stdin.write(frame)) {
+        await Promise.race([done, new Promise<void>((res) => { ff.stdin.once("drain", () => res()); ff.stdin.once("close", () => res()); })]);
+      }
     }
-    ff.stdin.end();
-    if ((await done) !== 0) throw new RenderError("ffmpeg failed; is it installed?", logs);
+    if (!exited) ff.stdin.end();
+    const code = await done;
+    if (failure) throw failure;
+    if (code !== 0) throw new RenderError("ffmpeg failed; is it installed?", logs);
   } finally {
     await tab.close();
   }
