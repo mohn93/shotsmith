@@ -41,7 +41,8 @@ export function checkSidecars(cfg: ResolvedConfig, sidecars: Sidecar[]): Finding
     for (const w of s.warnings) {
       const i = w.indexOf(": ");
       const rule = i > 0 && /^[a-z][\w.]*$/i.test(w.slice(0, i)) ? w.slice(0, i) : "kit.warning";
-      out.push(warn(rule, i > 0 ? w.slice(i + 2) : w, where));
+      // A page that does not use the kit cannot be verified (text, claims, fonts), so it fails the checks.
+      out.push((rule === "kit.unused" ? err : warn)(rule, i > 0 ? w.slice(i + 2) : w, where));
     }
   }
   return out;

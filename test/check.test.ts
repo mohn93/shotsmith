@@ -7,7 +7,7 @@ import { loadConfig } from "../src/config/schema.js";
 import { checkInputs } from "../src/checks/inputs.js";
 import { checkSidecars, loadSidecars } from "../src/checks/sidecars.js";
 import { checkExports, exportPath } from "../src/checks/store.js";
-import type { Sidecar } from "../src/shared/sidecar.js";
+import { emptySidecar, type Sidecar } from "../src/shared/sidecar.js";
 
 function ws(targets: unknown[], pages = ["a", "b"]): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "check-"));
@@ -45,6 +45,12 @@ describe("checks", () => {
     expect(rules(f)).toEqual(["capture.fallback", "font.appleOnly", "text.coverage", "text.overflow", "text.safeArea", "text.shrink"]);
     expect(f.find((x) => x.rule === "text.shrink")!.severity).toBe("warning");
     expect(loadSidecars(cfg).findings.map((x) => x.rule)).toEqual(["render.missing"]);
+  });
+
+  it("fails a page that does not use the kit", () => {
+    const cfg = loadConfig(ws(["android-phone"], ["a"]));
+    const f = checkSidecars(cfg, [emptySidecar("a", "android-phone", "en", "kit.unused: page did not use the kit; its text and fonts were not checked")]);
+    expect(f).toEqual([expect.objectContaining({ rule: "kit.unused", severity: "error", page: "a" })]);
   });
 
   it("reports characters the configured font has no glyph for", () => {

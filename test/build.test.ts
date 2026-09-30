@@ -76,6 +76,14 @@ describe("build", () => {
     expect(rules).toEqual(expect.arrayContaining(["render.missing", "store.missing"]));
   });
 
+  it("fails pages that do not use the kit, while render still writes them", () => {
+    const ws = tmpWorkspace("basic");
+    expect(cli(ws, "render", "plain", "-t", "android-phone").code).toBe(0);
+    const b = cli(ws, "build", "-t", "android-phone");
+    expect(b.code).toBe(1);
+    expect(JSON.parse(b.out).errors).toContainEqual(expect.objectContaining({ rule: "kit.unused", severity: "error", page: "plain" }));
+  });
+
   it("fails and reports untraced text", async () => {
     const ws = prepare();
     await makeCaptures(ws);
