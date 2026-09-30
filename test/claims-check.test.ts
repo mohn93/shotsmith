@@ -36,7 +36,16 @@ describe("checkClaims", () => {
       sidecar("de", { claimsShown: [shown("h", "Fresh ideas for your table.")] }),
     ]);
     expect(bad.filter((x) => x.rule === "claims.mismatch").map((x) => `${x.severity}:${x.locale}`)).toEqual(["error:en", "error:en", "error:de"]);
-    expect(bad[0].message).toMatch(/shows "Fresh ideas" but its en text is "Fresh {2}ideas\nfor your table\."/);
+    expect(bad[0].message).toBe('claim "h" shows "Fresh ideas" but its en text is "Fresh ideas for your table."');
+  });
+
+  it("shows where long texts first differ, on one line", () => {
+    const cfg = config(["en"]);
+    const long = "Plan every meal of the week in minutes,\nthen shop for all of it with one list that sorts itself by aisle.";
+    const f = checkClaims(cfg, { h: { source: "s", text: { en: long } } }, [sidecar("en", { claimsShown: [shown("h", long.replace("one list", "two lists"))] })]);
+    expect(f.map((x) => x.rule)).toEqual(["claims.mismatch"]);
+    expect(f[0].message).not.toMatch(/\n/);
+    expect(f[0].message).toMatch(/shows "\.\.\.[^"]*with two lists[^"]*" but its en text is "\.\.\.[^"]*with one list[^"]*" \(they differ from character \d+\)/);
   });
 
   it("reports every generated text that is not chrome, with its kind", () => {
@@ -47,10 +56,12 @@ describe("checkClaims", () => {
     kinds.forEach((k, i) => expect(f[i].message).toMatch(new RegExp(`^${k}: "Free forever"`)));
   });
 
-  it("ignores punctuation-only pseudo content but not numbered list markers", () => {
+  it("ignores punctuation and symbol decoration in pseudo content and markers, but not counters or words", () => {
     const cfg = config(["en"]);
-    const f = checkClaims(cfg, {}, [sidecar("en", { generated: [gen("pseudo", '"'), gen("pseudo", "“ ”"), gen("pseudo", "•"), gen("marker", "decimal"), gen("pseudo", 'counter(step) ". "')] })]);
-    expect(f.map((x) => x.rule)).toEqual(["claims.untraced", "claims.untraced"]);
-    for (const x of f) expect(x.message).toMatch(/numbered lists must put their numbers in claim text/);
+    const decoration = [gen("pseudo", '"'), gen("pseudo", "\u201c \u201d"), gen("pseudo", "\u2022"), gen("pseudo", "\u2713"), gen("marker", "\u2022"), gen("marker", "\u2605"), gen("marker", "\u2192")];
+    const f = checkClaims(cfg, {}, [sidecar("en", { generated: [...decoration, gen("marker", "decimal"), gen("pseudo", 'counter(step) ". "'), gen("marker", "Free forever")] })]);
+    expect(f.map((x) => x.rule)).toEqual(["claims.untraced", "claims.untraced", "claims.untraced"]);
+    const hint = /numbered lists must put their numbers in claim text/;
+    expect(f.map((x) => hint.test(x.message))).toEqual([true, true, false]);
   });
 });

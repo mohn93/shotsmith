@@ -15,7 +15,7 @@ export function registerBuild(program: Command) {
       const jobs = Number(o.jobs);
       if (!Number.isInteger(jobs) || jobs < 1) throw new Error(`--jobs must be a whole number of 1 or more, got "${o.jobs}"`);
       const res = await build(loadConfig(g.cwd), { targets: o.target, locales: o.locale, jobs });
-      if (!g.json) console.log(`rendered ${res.rendered.length}, failed ${res.failures.length}; report: ${res.report}`);
+      if (!g.json) console.log(`rendered ${res.rendered.length}, failed ${res.failures.length}; report: ${res.report || "not written (the output folder is a link)"}`);
       process.exitCode = printFindings(res.findings, !!g.json, { report: res.report, rendered: res.rendered.length });
     });
 }

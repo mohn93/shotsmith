@@ -5,14 +5,39 @@ import { type Finding, err, warn } from "./findings.js";
 
 // Line breaks and spacing are layout, not wording, so claims are compared with all whitespace removed.
 const bare = (s: string) => s.replace(/\s+/g, "");
-const quote = (s: string) => `"${s.length > 60 ? `${s.slice(0, 60)}...` : s}"`;
+// Messages are one line: whitespace (newlines included) collapses to single spaces.
+const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+const quote = (s: string) => { const t = oneLine(s); return `"${t.length > 60 ? `${t.slice(0, 60)}...` : t}"`; };
 
-// Quotation marks and other punctuation alone (the quotes of <q>, a bullet) carry no claim.
-const PUNCTUATION_ONLY = /^[\p{P}\s]*$/u;
+// Where s (one line) has passed n non-space characters.
+function indexAfter(s: string, n: number): number {
+  let i = 0;
+  for (let seen = 0; i < s.length && seen < n; i++) if (!/\s/.test(s[i])) seen++;
+  return i;
+}
+
+// Both texts, cut to the part around their first difference (whitespace ignored) when either is long.
+function mismatchText(shown: string, claim: string, locale: string): string {
+  const a = oneLine(shown), b = oneLine(claim);
+  if (a.length <= 60 && b.length <= 60) return `shows "${a}" but its ${locale} text is "${b}"`;
+  const x = bare(a), y = bare(b);
+  let n = 0;
+  while (n < x.length && n < y.length && x[n] === y[n]) n++;
+  const around = (s: string) => {
+    const i = indexAfter(s, n), from = Math.max(0, i - 20), to = Math.min(s.length, i + 40);
+    return `"${from > 0 ? "..." : ""}${s.slice(from, to)}${to < s.length ? "..." : ""}"`;
+  };
+  return `shows ${around(a)} but its ${locale} text is ${around(b)} (they differ from character ${indexAfter(a, n) + 1})`;
+}
+
+// Punctuation and symbols alone (the quotes of <q>, bullets, check marks, arrows) are decoration, not claims.
+const DECORATION = /^[\p{P}\p{S}\s]*$/u;
+// A list marker drawn from a counter: a counter style keyword (decimal, lower-roman) or a counter() value.
+const isCounter = (g: SidecarGenerated) => (g.kind === "marker" && /^[a-z][a-z-]*$/.test(g.text)) || /\bcounters?\(/.test(g.text);
 
 const HOW: Record<SidecarGenerated["kind"], string> = {
   pseudo: "shown by a ::before or ::after content value",
-  marker: "shown as a list marker; numbered lists must put their numbers in claim text (use list-style: none)",
+  marker: "shown as a list marker",
   canvas: "drawn on a canvas",
   frame: "shown in a frame, which the checks cannot read",
   form: "shown by a form control",
@@ -37,7 +62,7 @@ export function checkClaims(cfg: ResolvedConfig, claims: Claims, sidecars: Sidec
     for (const t of s.texts) {
       if (t.claim) known(t.claim);
       else if (!t.chrome && s.kit) {
-        out.push(err("claims.untraced", `"${t.text.slice(0, 40)}" is visible text not taken from claims.json; use t() or t.el()`, where));
+        out.push(err("claims.untraced", `"${oneLine(t.text).slice(0, 40)}" is visible text not taken from claims.json; use t() or t.el()`, where));
       }
     }
     // data-claim alone proves nothing: each claim element must show exactly the claim's text for this locale.
@@ -45,12 +70,12 @@ export function checkClaims(cfg: ResolvedConfig, claims: Claims, sidecars: Sidec
       if (!known(c.claim)) continue;
       const text = claims[c.claim].text[s.locale] ?? "";
       if (bare(c.text) !== bare(text)) {
-        out.push(err("claims.mismatch", `claim "${c.claim}" shows ${quote(c.text)} but its ${s.locale} text is ${quote(text)}`, where));
+        out.push(err("claims.mismatch", `claim "${c.claim}" ${mismatchText(c.text, text, s.locale)}`, where));
       }
     }
     for (const g of s.generated) {
-      if (g.chrome || (g.kind === "pseudo" && PUNCTUATION_ONLY.test(g.text))) continue;
-      const counter = g.kind === "pseudo" && /\bcounters?\(/.test(g.text) ? "; numbered lists must put their numbers in claim text" : "";
+      if (g.chrome || ((g.kind === "pseudo" || g.kind === "marker") && DECORATION.test(g.text))) continue;
+      const counter = isCounter(g) ? "; numbered lists must put their numbers in claim text (use list-style: none)" : "";
       out.push(err("claims.untraced", `${g.kind}: ${quote(g.text)} is ${HOW[g.kind] ?? "generated"}${counter}, not taken from claims.json; show claims with t() or t.el()`, where));
     }
   }

@@ -6,6 +6,8 @@ import { outPath } from "../render/render.js";
 import { type Sidecar, sidecarPath } from "../shared/sidecar.js";
 import { type Finding, err, warn } from "./findings.js";
 
+// A text for a one-line message.
+const short = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 40);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 // What a sidecar lacks for the checks to read it, or null when it is complete.
@@ -47,7 +49,7 @@ export function checkSidecars(cfg: ResolvedConfig, sidecars: Sidecar[]): Finding
     const where = { locale: s.locale, target: s.target, page: s.page };
     const target = cfg.targets.find((t) => t.name === s.target);
     for (const t of s.texts) {
-      const q = `"${t.text.slice(0, 40)}"`;
+      const q = `"${short(t.text)}"`;
       if (t.overflow) out.push(err("text.overflow", `${q} does not fit its box`, where));
       if (t.clipped) out.push(err("text.clipped", `${q} runs off the image`, where));
       if (t.safeArea && !t.clipped) out.push(err("text.safeArea", `${q} is inside the top or bottom 4%`, where));
@@ -74,9 +76,9 @@ export function checkSidecars(cfg: ResolvedConfig, sidecars: Sidecar[]): Finding
       for (const t of s.texts) {
         const names = [...t.fallbackFonts, ...(t.usedFonts ?? [])];
         const n = names.find(isAppleOnlyFontName);
-        if (n && !names.some((x) => named.has(x) || apple.has(x))) apple.set(n, `"${t.text.slice(0, 40)}" is drawn with ${n}, which is licensed for Apple platforms only`);
+        if (n && !names.some((x) => named.has(x) || apple.has(x))) apple.set(n, `"${short(t.text)}" is drawn with ${n}, which is licensed for Apple platforms only`);
       }
-      for (const m of apple.values()) out.push(err("font.appleOnly", m, where));
+      for (const m of apple.values()) out.push(err("font.appleOnly", `${m}; use the configured Play font (fonts.<role>.play) on Google Play targets`, where));
     }
     if (target) for (const c of s.requests.captures) {
       const platform = c.split("/")[2]?.toLowerCase() ?? "";
@@ -84,7 +86,7 @@ export function checkSidecars(cfg: ResolvedConfig, sidecars: Sidecar[]): Finding
         out.push(err("capture.crossPlatform", `the page loaded ${c}, a ${platform} capture, on a ${target.platform} target; captures never come from another platform`, where));
       }
     }
-    if (s.changedAfterReady) out.push(err("render.changedAfterReady", "the page's text changed after ready(); the checks ran on text that is not in the image", where));
+    if (s.changedAfterReady) out.push(err("render.changedAfterReady", "the page's text changed after ready(), so the checks ran on text that is not in the image; do not change text after ready()", where));
     for (const w of s.warnings) {
       const i = w.indexOf(": ");
       const rule = i > 0 && /^[a-z][\w.]*$/i.test(w.slice(0, i)) ? w.slice(0, i) : "kit.warning";

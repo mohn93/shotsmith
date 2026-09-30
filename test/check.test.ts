@@ -80,6 +80,7 @@ describe("checks", () => {
     const f = checkSidecars(cfg, [sc("android-phone"), sc("iphone-6.9")]);
     expect(f.map((x) => `${x.rule} ${x.target}`)).toEqual(Array(3).fill("font.appleOnly android-phone"));
     expect(f.map((x) => x.message)).toEqual([expect.stringMatching(/^\/fonts\/Brand\.otf is SF Compact Display/), expect.stringMatching(/"Sys" is drawn with \.SF NS/), expect.stringMatching(/"Data" is drawn with New York/)]);
+    for (const x of f) expect(x.message).toMatch(/; use the configured Play font \(fonts\.<role>\.play\) on Google Play targets$/);
   });
 
   it("reports cross-platform captures and text changed after ready()", () => {
@@ -88,6 +89,7 @@ describe("checks", () => {
     const f = checkSidecars(cfg, [sc("android-phone", ["/inputs/iphone/en/home.png", "/inputs/android-phone/en/home.png", "/inputs/logo.png"]), sc("iphone-6.9", ["/inputs/iphone/en/home.png"], true)]);
     expect(f.map((x) => `${x.rule} ${x.target}`)).toEqual(["capture.crossPlatform android-phone", "render.changedAfterReady iphone-6.9"]);
     expect(f[0].message).toMatch(/\/inputs\/iphone\/en\/home\.png/);
+    expect(f[1].message).toMatch(/do not change text after ready\(\)$/);
   });
 
   it("reports unreadable and incomplete sidecars as render.corrupt instead of crashing", () => {

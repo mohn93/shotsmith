@@ -4,7 +4,7 @@ import { checkClaims } from "../checks/claims.js";
 import { type Finding, type Where, err, formatFinding } from "../checks/findings.js";
 import { checkInputs } from "../checks/inputs.js";
 import { checkSidecars, loadSidecars } from "../checks/sidecars.js";
-import { checkExports, exportPath, staleOutputs } from "../checks/store.js";
+import { checkExports, exportPath, reachedWithoutLinks, staleOutputs } from "../checks/store.js";
 import { loadClaims } from "../config/claims.js";
 import type { ResolvedConfig } from "../config/schema.js";
 import { type RenderJob, type RenderResult, openRenderer, outPath, renderPage } from "../render/render.js";
@@ -15,6 +15,12 @@ export interface BuildOptions { targets?: string[]; locales?: string[]; jobs?: n
 export interface BuildResult { rendered: RenderResult[]; failures: { job: RenderJob; error: string }[]; findings: Finding[]; report: string }
 
 const lstatOrNull = (p: string): fs.Stats | null => { try { return fs.lstatSync(p); } catch { return null; } };
+
+// Removes dir and the folders inside it that are empty, bottom up; never follows links and never removes a file.
+function removeEmptyFolders(dir: string): void {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) removeEmptyFolders(path.join(dir, e.name));
+  if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+}
 
 export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<BuildResult> {
   const unknownTargets = (o.targets ?? []).filter((n) => !cfg.targets.some((t) => t.name === n));
@@ -40,12 +46,18 @@ export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<
     await r.close();
   }
 
-  // Stale image files anywhere in the output folder go; folders and other files are only reported by checkExports.
-  for (const f of staleOutputs(cfg).images) fs.rmSync(f);
+  // Nothing is written or deleted in a folder reached through a link (checkExports reports it as store.linked).
+  const safe = (file: string) => reachedWithoutLinks(cfg.root, path.dirname(file));
+  // Stale image files anywhere in the output folder go, then the folders of removed locales and targets if that left
+  // them empty. Other stale files and folders are only reported.
+  const scan = staleOutputs(cfg);
+  for (const f of scan.images) if (safe(f)) fs.rmSync(f);
+  for (const s of scan.stale) if (s.directory && !s.where.target && safe(s.path)) removeEmptyFolders(s.path);
   for (const l of locales) for (const t of targets) {
     const pngs: string[] = [];
     for (const page of cfg.pages) {
       const png = outPath(cfg, l.code, t.name, page), jpg = exportPath(cfg, l.code, t.name, page);
+      if (!safe(jpg)) continue;
       const kind = lstatOrNull(jpg);
       // A folder in the way is reported as stale; the export is then missing.
       if (kind?.isDirectory()) continue;
@@ -60,6 +72,7 @@ export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<
       pngs.push(png);
     }
     const sheet = path.join(cfg.root, cfg.output, "contact-sheets", `${l.code}-${t.name}.jpg`);
+    if (!safe(sheet)) continue;
     const sheetKind = lstatOrNull(sheet);
     if (sheetKind?.isDirectory()) continue;
     if (sheetKind && !sheetKind.isFile()) fs.unlinkSync(sheet);
@@ -99,6 +112,8 @@ function writeReport(cfg: ResolvedConfig, jobs: RenderJob[], rendered: RenderRes
     ...warnings.map((f) => `- ${formatFinding(f)}`), "",
   ];
   const file = path.join(cfg.root, cfg.output, "REPORT.md");
+  // A linked output folder is reported as store.linked; the report is not written through it.
+  if (!reachedWithoutLinks(cfg.root, path.dirname(file))) return "";
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, lines.join("\n"));
   return file;

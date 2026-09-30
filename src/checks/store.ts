@@ -13,8 +13,26 @@ const IMAGE = /\.(jpe?g|png)$/i;
 const IGNORED = new Set([".DS_Store"]);
 
 export interface StaleOutput { path: string; directory: boolean; where: Where }
+export interface OutputScan {
+  stale: StaleOutput[];
+  // Every regular image file that is stale or inside a stale folder.
+  images: string[];
+  // Links at the output root, locale or target level: the output would be written somewhere else.
+  linked: StaleOutput[];
+}
 
 const isRegularFile = (p: string): boolean => { try { return fs.lstatSync(p).isFile(); } catch { return false; } };
+const exists = (p: string): boolean => { try { fs.lstatSync(p); return true; } catch { return false; } };
+
+// True when p, or its nearest existing ancestor, is reached from the workspace root without passing through a link,
+// so writing or deleting there stays inside the workspace.
+export function reachedWithoutLinks(root: string, p: string): boolean {
+  let q = path.resolve(p);
+  while (!exists(q) && path.dirname(q) !== q) q = path.dirname(q);
+  const rel = path.relative(path.resolve(root), q);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return false;
+  try { return fs.realpathSync(q) === path.join(fs.realpathSync(root), rel); } catch { return false; }
+}
 
 // Every regular image file under dir, without following links.
 function imagesUnder(dir: string): string[] {
@@ -25,26 +43,31 @@ function imagesUnder(dir: string): string[] {
 }
 
 // Walks the output folder. Only <locale>/<target>/<page>.jpg and contact-sheets/<locale>-<target>.jpg for configured
-// names, REPORT.md and upload-*.json belong there; anything else is stale. A stale folder is reported once, and
-// images lists every regular image file that is stale or inside a stale folder.
-export function staleOutputs(cfg: ResolvedConfig): { stale: StaleOutput[]; images: string[] } {
-  const stale: StaleOutput[] = [], images: string[] = [];
+// names, REPORT.md and upload-*.json belong there; anything else is stale, and a stale folder is reported once. A link
+// at the output root, locale or target level is reported as linked and never walked.
+export function staleOutputs(cfg: ResolvedConfig): OutputScan {
+  const scan: OutputScan = { stale: [], images: [], linked: [] };
   const base = path.join(cfg.root, cfg.output);
+  if (!exists(base)) return scan;
+  if (!reachedWithoutLinks(cfg.root, base) || !fs.lstatSync(base).isDirectory()) {
+    scan.linked.push({ path: base, directory: true, where: {} });
+    return scan;
+  }
   const add = (p: string, e: fs.Dirent, where: Where) => {
     if (IGNORED.has(e.name) && e.isFile()) return;
-    stale.push({ path: p, directory: e.isDirectory(), where });
-    if (e.isDirectory()) images.push(...imagesUnder(p));
-    else if (e.isFile() && IMAGE.test(e.name)) images.push(p);
+    scan.stale.push({ path: p, directory: e.isDirectory(), where });
+    if (e.isDirectory()) scan.images.push(...imagesUnder(p));
+    else if (e.isFile() && IMAGE.test(e.name)) scan.images.push(p);
   };
-  const walk = (dir: string, where: Where, allowed: (e: fs.Dirent) => ((p: string) => void) | boolean) => {
+  const walk = (dir: string, where: Where, allowed: (e: fs.Dirent) => ((p: string) => void) | boolean, links = false) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
+      if (links && e.isSymbolicLink()) { scan.linked.push({ path: p, directory: false, where }); continue; }
       const ok = allowed(e);
       if (typeof ok === "function") ok(p);
       else if (!ok) add(p, e, where);
     }
   };
-  if (!fs.existsSync(base) || !fs.lstatSync(base).isDirectory()) return { stale, images };
   const locales = new Set(cfg.locales.map((l) => l.code)), targets = new Set(cfg.targets.map((t) => t.name)), pages = new Set(cfg.pages);
   const sheets = new Set(cfg.locales.flatMap((l) => cfg.targets.map((t) => `${l.code}-${t.name}.jpg`)));
   walk(base, {}, (e) => {
@@ -57,16 +80,20 @@ export function staleOutputs(cfg: ResolvedConfig): { stale: StaleOutput[]; image
       if (!t.isDirectory() || !targets.has(t.name)) return false;
       const target = t.name;
       return (tp) => walk(tp, { locale, target }, (f) => f.isFile() && f.name.endsWith(".jpg") && pages.has(f.name.slice(0, -4)));
-    });
-  });
-  return { stale, images };
+    }, true);
+  }, true);
+  return scan;
 }
 
 export async function checkExports(cfg: ResolvedConfig): Promise<Finding[]> {
   const out: Finding[] = [];
-  for (const s of staleOutputs(cfg).stale) {
-    const rel = path.relative(cfg.root, s.path).split(path.sep).join("/");
-    out.push(err("store.stale", `${rel}${s.directory ? "/" : ""} is not an export of a configured locale, target and page; delete it`, s.where));
+  const scan = staleOutputs(cfg);
+  const rel = (p: string) => path.relative(cfg.root, p).split(path.sep).join("/");
+  for (const s of scan.linked) {
+    out.push(err("store.linked", `${rel(s.path)} is a link or leaves the workspace; Shotsmith does not write or delete through it. Use a real folder inside the workspace`, s.where));
+  }
+  for (const s of scan.stale) {
+    out.push(err("store.stale", `${rel(s.path)}${s.directory ? "/" : ""} is not an export of a configured locale, target and page; delete it`, s.where));
   }
   for (const t of cfg.targets) {
     const play = t.store === "play";

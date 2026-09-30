@@ -3,7 +3,7 @@ import fs from "node:fs";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { makeCaptures } from "./captures.js";
-import { ROOT, tmpWorkspace } from "./helpers.js";
+import { ROOT, tempDir, tmpWorkspace } from "./helpers.js";
 
 function prepare(): string {
   const ws = tmpWorkspace("kit");
@@ -92,6 +92,43 @@ describe("build", () => {
     expect(code).toBe(1);
     expect(JSON.parse(out).errors.some((e: any) => e.rule === "claims.untraced")).toBe(true);
     expect(fs.readFileSync(`${ws}/export/REPORT.md`, "utf8")).toMatch(/claims\.untraced/);
+  });
+
+  // Every file under dir with its contents, to show a build left it alone.
+  const snapshot = (dir: string) => Object.fromEntries((fs.readdirSync(dir, { recursive: true }) as string[]).sort()
+    .map((f) => [f, fs.statSync(`${dir}/${f}`).isFile() ? fs.readFileSync(`${dir}/${f}`, "utf8") : "(dir)"]));
+
+  it("refuses a linked output folder and touches nothing outside the workspace", async () => {
+    const ws = prepare();
+    await allCaptures(ws);
+    const outside = tempDir("outside-export-");
+    fs.mkdirSync(`${outside}/en/android-phone`, { recursive: true });
+    fs.writeFileSync(`${outside}/en/android-phone/screen.jpg`, "old");
+    fs.writeFileSync(`${outside}/keep.png`, "keep");
+    const before = snapshot(outside);
+    fs.symlinkSync(outside, `${ws}/export`, "dir");
+    const { code, out } = cli(ws, "build", "-l", "en", "-t", "android-phone");
+    expect(code).toBe(1);
+    const res = JSON.parse(out);
+    expect(res.errors).toContainEqual(expect.objectContaining({ rule: "store.linked", message: expect.stringMatching(/^export is a link.*real folder inside the workspace/) }));
+    expect(res.report).toBe("");
+    expect(snapshot(outside)).toEqual(before);
+  });
+
+  it("refuses a linked target folder and leaves the files it points at alone", async () => {
+    const ws = prepare();
+    await allCaptures(ws);
+    const outside = tempDir("outside-target-");
+    fs.writeFileSync(`${outside}/screen.jpg`, "old");
+    fs.writeFileSync(`${outside}/stale.png`, "keep");
+    const before = snapshot(outside);
+    fs.mkdirSync(`${ws}/export/en`, { recursive: true });
+    fs.symlinkSync(outside, `${ws}/export/en/android-phone`, "dir");
+    const { code, out } = cli(ws, "build", "-l", "en", "-t", "android-phone");
+    expect(code).toBe(1);
+    expect(JSON.parse(out).errors).toContainEqual(expect.objectContaining({ rule: "store.linked", locale: "en", message: expect.stringMatching(/^export\/en\/android-phone is a link/) }));
+    expect(snapshot(outside)).toEqual(before);
+    expect(fs.existsSync(`${ws}/export/REPORT.md`)).toBe(true);
   });
 
   it("rejects unknown targets and locales and invalid --jobs", () => {

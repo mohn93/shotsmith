@@ -84,6 +84,23 @@ describe("bypass routes: claim elements that do not show their claim", () => {
 
 const HEADLINE = `<div data-claim="headline" style="${HEADLINE_STYLE}">Fresh ideas for your table.</div>`;
 
+describe("list markers and pseudo content", () => {
+  it.concurrent("passes a bullet list marker and a check-mark ::before", async () => {
+    const html = page(`<ul style="${HEADLINE_STYLE};list-style:'\u2022 '"><li class="tick" data-claim="headline">Fresh ideas for your table.</li></ul>`, {
+      head: "<style>.tick::before{content:'\u2713 '}</style>", extra: "await ready();" });
+    const r = await cli(await workspace("bullets", { html }), "build");
+    expect(r.findings.filter((f) => f.rule.startsWith("claims.")), JSON.stringify(r.findings)).toEqual([]);
+    expect(r.code, JSON.stringify(r.findings)).toBe(0);
+  });
+
+  it.concurrent("fails a numbered list and says to put the numbers in claim text", async () => {
+    const html = page(`<ol style="${HEADLINE_STYLE}"><li data-claim="headline">Fresh ideas for your table.</li></ol>`, { extra: "await ready();" });
+    const r = await cli(await workspace("numbered", { html }), "build");
+    expectRule(r, "claims.untraced", "numbered");
+    expect(r.findings.find((f) => f.rule === "claims.untraced")!.message).toMatch(/^marker: "decimal" .*numbered lists must put their numbers in claim text/);
+  });
+});
+
 describe("bypass routes: Apple-only fonts on Google Play", () => {
   it("rejects a locale font sysfont:SFArabic.ttf as a config error", async () => {
     const ws = await workspace("screen", { target: "android-phone", config: (c) => { c.locales[0].fonts = { display: "sysfont:SFArabic.ttf" }; } });
@@ -143,18 +160,32 @@ describe("bypass routes: captures, sidecars and exports", () => {
     expect(fs.existsSync(`${ws}/export/en/android-phone/screen.png`)).toBe(false);
   });
 
-  it("gives store.stale for a removed locale's folder", async () => {
+  it("gives store.stale for a removed locale's folder, which build empties and removes", async () => {
     const ws = await workspace("screen", { target: "android-phone", locales: ["en", "de"] });
     expect((await cli(ws, "build")).code).toBe(0);
     const cfg = JSON.parse(fs.readFileSync(`${ws}/shotsmith.config.json`, "utf8"));
     cfg.locales = [{ code: "en" }];
     fs.writeFileSync(`${ws}/shotsmith.config.json`, JSON.stringify(cfg));
-    const r = await cli(ws, "build");
-    expectRule(r, "store.stale");
-    expect(r.findings.find((f) => f.rule === "store.stale")!.message).toMatch(/^export\/de\//);
-    // Its images are gone; the folder is only reported.
-    expect(fs.existsSync(`${ws}/export/de/android-phone/screen.jpg`)).toBe(false);
+    const c = await cli(ws, "check");
+    expectRule(c, "store.stale");
+    expect(c.findings.filter((f) => f.rule === "store.stale").map((f) => f.message.split(" ")[0]).sort()).toEqual(["export/contact-sheets/de-android-phone.jpg", "export/de/"]);
+    // Build deletes its images, then the folders that left empty, so the next build passes.
+    expect((await cli(ws, "build")).code).toBe(0);
+    expect(fs.existsSync(`${ws}/export/de`)).toBe(false);
     expect(fs.existsSync(`${ws}/export/contact-sheets/de-android-phone.jpg`)).toBe(false);
+    expect(fs.existsSync(`${ws}/export/en/android-phone/screen.jpg`)).toBe(true);
+  });
+
+  it("keeps and reports a removed locale's folder that still holds other files", async () => {
+    const ws = await workspace("screen", { target: "android-phone" });
+    fs.mkdirSync(`${ws}/export/de/android-phone`, { recursive: true });
+    fs.writeFileSync(`${ws}/export/de/android-phone/screen.jpg`, "x");
+    fs.writeFileSync(`${ws}/export/de/notes.txt`, "keep");
+    const r = await cli(ws, "build");
+    expect(r.rules).toEqual(["store.stale"]);
+    expect(r.findings.find((f) => f.rule === "store.stale")!.message).toMatch(/^export\/de\//);
+    expect(fs.readFileSync(`${ws}/export/de/notes.txt`, "utf8")).toBe("keep");
+    expect(fs.existsSync(`${ws}/export/de/android-phone`)).toBe(false);
   });
 
   it("gives store.stale for a folder named extra.png in an export folder, without crashing build", async () => {
