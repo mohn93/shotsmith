@@ -49,11 +49,15 @@ function targetOf(r: Renderer, name: string) {
   return t;
 }
 
-async function openPage(r: Renderer, job: RenderJob, logs: string[]): Promise<Page> {
+interface OpenedPage { tab: Page; pageError: Promise<Error> }
+
+async function openPage(r: Renderer, job: RenderJob, logs: string[]): Promise<OpenedPage> {
   const t = targetOf(r, job.target);
   const tab = await r.browser.newPage({ viewport: { width: t.w, height: t.h }, deviceScaleFactor: 1 });
+  let onError: (e: Error) => void = () => {};
+  const pageError = new Promise<Error>((res) => { onError = res; });
   tab.on("console", (m) => logs.push(`[${m.type()}] ${m.text()}`));
-  tab.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
+  tab.on("pageerror", (e) => { logs.push(`[pageerror] ${e.message}`); onError(e); });
   const q = `t=${encodeURIComponent(job.target)}&l=${encodeURIComponent(job.locale)}`;
   try {
     const res = await tab.goto(`${r.server.url}/pages/${job.page}.html?${q}`, { waitUntil: "load" });
@@ -62,7 +66,20 @@ async function openPage(r: Renderer, job: RenderJob, logs: string[]): Promise<Pa
     await tab.close();
     throw e;
   }
-  return tab;
+  return { tab, pageError };
+}
+
+// Waits for the page's signal. An uncaught page error before it fails the render at once: a module that fails to
+// link (a missing export, a syntax error) never runs, so the kit cannot report it through window.__shotsmithError.
+async function waitForPage(r: Renderer, page: OpenedPage, signal: () => boolean, missing: string, label: string, logs: string[]): Promise<void> {
+  const outcome = await Promise.race([
+    page.tab.waitForFunction(signal, null, { timeout: r.timeoutMs }).then(() => "ok" as const, () => "timeout" as const),
+    page.pageError,
+  ]);
+  const kitError = await page.tab.evaluate(() => (window as any).__shotsmithError as string | undefined).catch(() => undefined);
+  if (kitError) throw new RenderError(`${label}: ${kitError}`, logs);
+  if (outcome instanceof Error) throw new RenderError(`${label}: ${outcome.message}`, logs);
+  if (outcome === "timeout") throw new RenderError(`${label} did not ${missing} within ${r.timeoutMs / 1000}s`, logs);
 }
 
 // Characters that never need a glyph of their own.
@@ -119,16 +136,11 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
   fs.rmSync(sidecarPath, { force: true });
   const logs: string[] = [];
   const started = Date.now();
-  const tab = await openPage(r, job, logs);
+  const opened = await openPage(r, job, logs);
+  const tab = opened.tab;
   const label = `${job.page} (${job.target}, ${job.locale})`;
   try {
-    try {
-      await tab.waitForFunction(() => (window as any).__ready === true || typeof (window as any).__shotsmithError === "string", null, { timeout: r.timeoutMs });
-    } catch {
-      throw new RenderError(`${label} did not set window.__ready within ${r.timeoutMs / 1000}s`, logs);
-    }
-    const error = await tab.evaluate(() => (window as any).__shotsmithError as string | undefined);
-    if (error) throw new RenderError(`${label}: ${error}`, logs);
+    await waitForPage(r, opened, () => (window as any).__ready === true || typeof (window as any).__shotsmithError === "string", "set window.__ready", label, logs);
     fs.mkdirSync(path.dirname(job.out), { recursive: true });
     await tab.screenshot({ path: job.out, clip: { x: 0, y: 0, width: t.w, height: t.h } });
     const raw = (await tab.evaluate(() => (window as any).__shotsmithSidecar ?? null)) as Sidecar | null;
@@ -151,15 +163,10 @@ export async function renderVideo(r: Renderer, job: RenderJob, opts: { fps: numb
   const t = targetOf(r, job.target);
   const logs: string[] = [];
   const label = `${job.page} (${job.target}, ${job.locale})`;
-  const tab = await openPage(r, job, logs);
+  const opened = await openPage(r, job, logs);
+  const tab = opened.tab;
   try {
-    try {
-      await tab.waitForFunction(() => typeof (window as any).__seek === "function" || typeof (window as any).__shotsmithError === "string", null, { timeout: r.timeoutMs });
-    } catch {
-      throw new RenderError(`${label} did not define window.__seek within ${r.timeoutMs / 1000}s`, logs);
-    }
-    const pageError = await tab.evaluate(() => (window as any).__shotsmithError as string | undefined);
-    if (pageError) throw new RenderError(`${label}: ${pageError}`, logs);
+    await waitForPage(r, opened, () => typeof (window as any).__seek === "function" || typeof (window as any).__shotsmithError === "string", "define window.__seek", label, logs);
     fs.mkdirSync(path.dirname(job.out), { recursive: true });
     const ff = spawn("ffmpeg", ["-y", "-f", "image2pipe", "-framerate", String(opts.fps), "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", job.out], { stdio: ["pipe", "ignore", "inherit"] });
     let exited = false;

@@ -44,6 +44,18 @@ describe("renderer", () => {
     });
   });
 
+  it("fails fast when a page module does not link", async () => {
+    const ws = tmpWorkspace("basic");
+    fs.writeFileSync(`${ws}/pages/link.html`, `<!doctype html><body><script type="module">
+      import { stage, nope } from "shotsmith/kit";
+      await stage();</script></body></html>`);
+    await withRenderer(ws, async (r) => {
+      const started = Date.now();
+      await expect(renderPage(r, { page: "link", target: "iphone-6.9", locale: "en", out: outPath(r.cfg, "en", "iphone-6.9", "link") })).rejects.toThrow(/does not provide an export named 'nope'/);
+      expect(Date.now() - started).toBeLessThan(10000);
+    });
+  });
+
   it("reports a missing ffmpeg instead of crashing", async () => {
     const ws = tmpWorkspace("basic");
     await withRenderer(ws, async (r) => {
