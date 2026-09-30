@@ -111,6 +111,8 @@ async function applyCoverage(tab: Page, sidecar: Sidecar, fonts: KitContext["fon
 export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderResult> {
   const t = targetOf(r, job.target);
   if (!r.cfg.locales.some((l) => l.code === job.locale)) throw new Error(`Unknown locale "${job.locale}"`);
+  // The sidecar is written next to the image as <name>.json, so the image must be a .png.
+  if (!/\.png$/.test(job.out)) throw new Error(`Render output must be a .png file, got ${job.out}`);
   const sidecarPath = job.out.replace(/\.png$/, ".json");
   // A failed render must not leave the previous image and sidecar behind for check to pass on.
   fs.rmSync(job.out, { force: true });

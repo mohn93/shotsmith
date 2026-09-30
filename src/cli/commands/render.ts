@@ -18,6 +18,7 @@ export function registerRender(program: Command) {
       const cfg = loadConfig(g.cwd);
       const target = o.target ?? cfg.targets[0].name, locale = o.locale ?? cfg.defaultLocale;
       const out = o.out ? path.resolve(o.out) : o.video ? outPath(cfg, locale, target, page).replace(/\.png$/, ".mp4") : outPath(cfg, locale, target, page);
+      if (!o.video && !/\.png$/.test(out)) throw new Error(`--out must end in .png for a still render (its sidecar is written next to it as .json); got ${o.out}`);
       const r = await openRenderer(cfg);
       try {
         if (o.video) { await renderVideo(r, { page, target, locale, out }, { fps: Number(o.fps), duration: Number(o.duration) }); console.log(g.json ? JSON.stringify({ out }) : `wrote ${out}`); return; }

@@ -60,6 +60,21 @@ describe("renderer", () => {
     });
   });
 
+  it("refuses a still render to a file that is not a .png", async () => {
+    const ws = tmpWorkspace("basic");
+    fs.writeFileSync(`${ws}/keep.jpg`, "keep");
+    let res: { code: number; err: string } = { code: 0, err: "" };
+    try { execFileSync("node", [`${ROOT}/dist/cli.js`, "render", "plain", "-C", ws, "-o", `${ws}/keep.jpg`], { encoding: "utf8", stdio: "pipe" }); }
+    catch (e: any) { res = { code: e.status, err: String(e.stderr) }; }
+    expect(res.code).toBe(1);
+    expect(res.err).toMatch(/--out must end in \.png/);
+    expect(fs.readFileSync(`${ws}/keep.jpg`, "utf8")).toBe("keep");
+    await withRenderer(ws, async (r) => {
+      await expect(renderPage(r, { page: "plain", target: "iphone-6.9", locale: "en", out: `${ws}/keep.jpg` })).rejects.toThrow(/must be a \.png/);
+    });
+    expect(fs.readFileSync(`${ws}/keep.jpg`, "utf8")).toBe("keep");
+  });
+
   it("renders from the CLI", () => {
     const ws = tmpWorkspace("basic");
     execFileSync("node", [`${ROOT}/dist/cli.js`, "render", "plain", "-C", ws, "-t", "iphone-6.9"], { encoding: "utf8" });
