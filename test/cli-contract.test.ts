@@ -117,7 +117,7 @@ describe("cli contract", () => {
     expect(r.code).toBe(0);
     expect(fs.existsSync(`${ws}/rel.png`)).toBe(true);
     expect(r.out.trim().split("\n")).toHaveLength(1);
-    expect(JSON.parse(r.out)).toMatchObject({ ok: true, out: `${ws}/rel.png`, sidecar: `${ws}/rel.json`, warnings: expect.any(Array), ms: expect.any(Number) });
+    expect(JSON.parse(r.out)).toMatchObject({ ok: true, out: `${ws}/rel.png`, sidecar: `${ws}/rel.sidecar.json`, warnings: expect.any(Array), ms: expect.any(Number) });
   });
 
   it("reports thumbs as { ok, file }", async () => {

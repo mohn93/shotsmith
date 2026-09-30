@@ -22,8 +22,8 @@ export function tmpWorkspace(fixture: string): string {
   return dir;
 }
 
-export async function withRenderer<T>(ws: string, fn: (r: Renderer) => Promise<T>): Promise<T> {
-  const r = await openRenderer(loadConfig(ws));
+export async function withRenderer<T>(ws: string, fn: (r: Renderer) => Promise<T>, opts: { timeoutMs?: number } = {}): Promise<T> {
+  const r = await openRenderer(loadConfig(ws), opts);
   try { return await fn(r); } finally { await r.close(); }
 }
 

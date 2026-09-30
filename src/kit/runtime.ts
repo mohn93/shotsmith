@@ -1,8 +1,8 @@
 import type { KitContext } from "../shared/context.js";
-import type { Sidecar, SidecarDevice } from "../shared/sidecar.js";
+import type { KitSidecar, SidecarDevice } from "../shared/sidecar.js";
 
 declare global {
-  interface Window { __ready?: boolean; __shotsmithError?: string; __shotsmithSidecar?: Sidecar }
+  interface Window { __ready?: boolean; __shotsmithError?: string; __shotsmithSidecar?: KitSidecar; __shotsmithDomHash?: string }
 }
 
 export const LOGICAL_WIDTH = 1260;

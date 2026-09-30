@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import { APPLE_ONLY_FONT, type ResolvedConfig } from "../config/schema.js";
 import { outPath } from "../render/render.js";
-import type { Sidecar } from "../shared/sidecar.js";
+import { type Sidecar, sidecarPath } from "../shared/sidecar.js";
 import { type Finding, err, warn } from "./findings.js";
 
 export function loadSidecars(cfg: ResolvedConfig): { sidecars: Sidecar[]; findings: Finding[] } {
   const sidecars: Sidecar[] = [], findings: Finding[] = [];
   for (const l of cfg.locales) for (const t of cfg.targets) for (const p of cfg.pages) {
-    const file = outPath(cfg, l.code, t.name, p).replace(/\.png$/, ".json");
+    const file = sidecarPath(outPath(cfg, l.code, t.name, p));
     if (!fs.existsSync(file)) findings.push(err("render.missing", "not rendered; run shotsmith build", { locale: l.code, target: t.name, page: p }));
     else sidecars.push(JSON.parse(fs.readFileSync(file, "utf8")));
   }

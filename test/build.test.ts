@@ -67,7 +67,7 @@ describe("build", () => {
     const b = cli(ws, "build", "-l", "en", "-t", "iphone-6.9");
     expect(b.code).toBe(1);
     expect(JSON.parse(b.out).errors.map((e: any) => e.rule)).toContain("render.failed");
-    for (const f of ["out/en/iphone-6.9/screen.png", "out/en/iphone-6.9/screen.json", "export/en/iphone-6.9/screen.jpg", "export/contact-sheets/en-iphone-6.9.jpg"]) {
+    for (const f of ["out/en/iphone-6.9/screen.png", "out/en/iphone-6.9/screen.sidecar.json", "export/en/iphone-6.9/screen.jpg", "export/contact-sheets/en-iphone-6.9.jpg"]) {
       expect(fs.existsSync(`${ws}/${f}`), f).toBe(false);
     }
     const c = cli(ws, "check");
