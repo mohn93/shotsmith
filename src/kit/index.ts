@@ -4,3 +4,4 @@ export { t, headline, type HeadlineOptions, type HeadlineResult } from "./text.j
 export { ready } from "./ready.js";
 export { waitFor } from "./runtime.js";
 export { device, composeScreen, type Device, type DeviceOptions, type Screen } from "./device.js";
+export { lift, type LiftOptions } from "./lift.js";
