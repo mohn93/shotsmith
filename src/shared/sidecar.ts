@@ -6,10 +6,23 @@ export interface SidecarText {
 }
 export interface SidecarFont { family: string; weight: string; url: string; status: "loaded" | "unloaded" }
 export interface SidecarDevice { platform: string; capture: string; statusBar: "included" | "none"; repaint: boolean; screen: [number, number] }
+// Text the page shows outside its DOM text nodes. Pseudo and marker boxes are their element's box; a canvas that is not
+// in the page (an OffscreenCanvas, a detached canvas) has box [0, 0, 0, 0] because where its pixels end up is unknown.
+export interface SidecarGenerated {
+  kind: "pseudo" | "marker" | "canvas" | "frame" | "form" | "svgImage" | "shadowClosed";
+  // The text shown, or the element description for frames, forms and closed shadow roots.
+  text: string;
+  box: [number, number, number, number];
+  // Inside [data-chrome].
+  chrome: boolean;
+}
+// What a [data-claim] element visibly shows: its visible text nodes, whitespace collapsed.
+export interface SidecarClaimShown { claim: string; text: string; box: [number, number, number, number] }
 // What the kit reports from the page (window.__shotsmithSidecar).
 export interface KitSidecar {
   page: string; target: string; locale: string; kit: boolean;
   texts: SidecarText[]; fonts: SidecarFont[]; captures: string[]; devices: SidecarDevice[]; lifts: number; warnings: string[];
+  generated: SidecarGenerated[]; claimsShown: SidecarClaimShown[];
 }
 // The renderer adds what the page cannot report about itself.
 export interface Sidecar extends KitSidecar {
@@ -45,5 +58,5 @@ export function domHash(text: string): string {
 
 export const emptySidecar = (page: string, target: string, locale: string, warning: string): Sidecar => ({
   page, target, locale, kit: false, texts: [], fonts: [], captures: [], devices: [], lifts: 0, warnings: [warning],
-  requests: { captures: [], fonts: [] }, changedAfterReady: false,
+  generated: [], claimsShown: [], requests: { captures: [], fonts: [] }, changedAfterReady: false,
 });

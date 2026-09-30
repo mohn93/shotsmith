@@ -1,5 +1,5 @@
 import type { Device } from "./device.js";
-import { state } from "./runtime.js";
+import { drawInternal, state } from "./runtime.js";
 
 export interface LiftOptions {
   region: [number, number, number, number]; scale?: number; radius?: number; inset?: number; shadow?: string;
@@ -15,7 +15,7 @@ export function lift(d: Device, o: LiftOptions): HTMLDivElement {
 
   const cw = x1 - x0 - 2 * inset, ch = y1 - y0 - 2 * inset;
   const crop = document.createElement("canvas"); crop.width = cw; crop.height = ch;
-  crop.getContext("2d")!.drawImage(d.image, x0 + inset, y0 + inset, cw, ch, 0, 0, cw, ch);
+  drawInternal(crop, () => crop.getContext("2d")!.drawImage(d.image, x0 + inset, y0 + inset, cw, ch, 0, 0, cw, ch));
   const w = cw * d.k * scale, h = ch * d.k * scale, radius = (o.radius ?? 28) * d.k * scale;
 
   if (mode === "recess") {

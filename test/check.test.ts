@@ -39,7 +39,7 @@ describe("checks", () => {
     const dir = ws(["android-phone"], ["a"]);
     const cfg = loadConfig(dir);
     const text = { el: 0, claim: "h", chrome: false, text: "Hi", box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: true, clipped: false, safeArea: true, shrink: 0.7, covered: false, fallbackFonts: ["Geeza Pro"] };
-    const sc: Sidecar = { page: "a", target: "android-phone", locale: "en", kit: true, texts: [text], captures: [], devices: [], lifts: 0, requests: { captures: [], fonts: [] }, changedAfterReady: false,
+    const sc: Sidecar = { page: "a", target: "android-phone", locale: "en", kit: true, texts: [text], captures: [], devices: [], lifts: 0, requests: { captures: [], fonts: [] }, changedAfterReady: false, generated: [], claimsShown: [],
       fonts: [{ family: "Shotsmith display", weight: "700", url: "/sysfont/SF-Pro-Display-Bold.otf", status: "loaded" }], warnings: ["capture.fallback: x"] };
     const f = checkSidecars(cfg, [sc]);
     expect(rules(f)).toEqual(["capture.fallback", "font.appleOnly", "text.coverage", "text.overflow", "text.safeArea", "text.shrink"]);
@@ -56,7 +56,7 @@ describe("checks", () => {
   it("reports characters the configured font has no glyph for", () => {
     const cfg = loadConfig(ws(["android-phone"], ["a"]));
     const text = { el: 0, claim: "h", chrome: false, text: "Tap \uE001", box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: false, clipped: false, safeArea: false, shrink: null, covered: false, fallbackFonts: [], missingGlyphs: ["U+E001"] };
-    const sc: Sidecar = { page: "a", target: "android-phone", locale: "en", kit: true, texts: [text], captures: [], devices: [], lifts: 0, requests: { captures: [], fonts: [] }, changedAfterReady: false, fonts: [], warnings: [] };
+    const sc: Sidecar = { page: "a", target: "android-phone", locale: "en", kit: true, texts: [text], captures: [], devices: [], lifts: 0, requests: { captures: [], fonts: [] }, changedAfterReady: false, generated: [], claimsShown: [], fonts: [], warnings: [] };
     const f = checkSidecars(cfg, [sc]);
     expect(f).toEqual([expect.objectContaining({ rule: "text.coverage", severity: "error", message: expect.stringContaining("U+E001") })]);
   });

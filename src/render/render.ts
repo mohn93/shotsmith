@@ -205,8 +205,16 @@ async function applyCoverage(tab: Page, sidecar: Sidecar, fonts: KitContext["fon
   const cdp = await tab.context().newCDPSession(tab);
   await cdp.send("DOM.enable");
   await cdp.send("CSS.enable");
-  const { root: doc } = await cdp.send("DOM.getDocument", { depth: -1 });
-  const { nodeIds } = await cdp.send("DOM.querySelectorAll", { nodeId: doc.nodeId, selector: "[data-sx]" });
+  // The kit also traces text in shadow roots, so search each of them as well as the document.
+  const { root: doc } = await cdp.send("DOM.getDocument", { depth: -1, pierce: true });
+  const scopes: number[] = [];
+  const visit = (n: typeof doc): void => {
+    if (n === doc || (n.shadowRootType && n.shadowRootType !== "user-agent")) scopes.push(n.nodeId);
+    for (const c of [...(n.children ?? []), ...(n.shadowRoots ?? [])]) visit(c);
+  };
+  visit(doc);
+  const nodeIds: number[] = [];
+  for (const nodeId of scopes) nodeIds.push(...(await cdp.send("DOM.querySelectorAll", { nodeId, selector: "[data-sx]" })).nodeIds);
   for (const nodeId of nodeIds) {
     const { attributes } = await cdp.send("DOM.getAttributes", { nodeId });
     const el = Number(attributes[attributes.indexOf("data-sx") + 1]);

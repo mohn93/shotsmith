@@ -1,4 +1,5 @@
-import { ctx, state, waitFor } from "./runtime.js";
+import type { KitContext } from "../shared/context.js";
+import { ctx, drawInternal, state, waitFor } from "./runtime.js";
 
 type Kind = "iphone" | "android" | "ipad" | "atab";
 const KIND: Record<string, Kind> = { iphone: "iphone", "android-phone": "android", ipad: "ipad", "android-tablet": "atab" };
@@ -27,7 +28,7 @@ const rgb = (c: readonly number[]) => `rgb(${c[0]},${c[1]},${c[2]})`;
 
 function probe(img: HTMLImageElement) {
   const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
-  const x = c.getContext("2d", { willReadFrequently: true })!; x.drawImage(img, 0, 0);
+  const x = c.getContext("2d", { willReadFrequently: true })!; drawInternal(c, () => x.drawImage(img, 0, 0));
   return (px: number, py: number) => {
     const d = x.getImageData(Math.max(0, Math.min(c.width - 1, Math.round(px))), Math.max(0, Math.min(c.height - 1, Math.round(py))), 1, 1).data;
     return [d[0], d[1], d[2]] as const;
@@ -78,6 +79,14 @@ function drawStatusBar(x: CanvasRenderingContext2D, kind: Kind, w: number, u: nu
   }
 }
 
+// Names the folders searched, locale folder first, and the captures that do exist.
+export function missingCapture(c: KitContext, name: string): Error {
+  const p = c.target.platform, l = c.locale.code, d = c.defaultLocale;
+  const dirs = [`inputs/${p}/${l}/`, ...(l !== d ? [`inputs/${p}/${d}/`] : []), `inputs/${p}/`];
+  const names = Object.keys(c.captures.files).sort();
+  return new Error(`No capture "${name}" for ${p} (looked in ${dirs.join(", ")}); available: ${names.length ? names.join(", ") : "none"}`);
+}
+
 export function composeScreen(img: HTMLImageElement, o: { repaint?: boolean; homeIndicator?: boolean }): Screen {
   const c = ctx();
   const kind = KIND[c.target.platform];
@@ -91,19 +100,22 @@ export function composeScreen(img: HTMLImageElement, o: { repaint?: boolean; hom
   const topBg = at(4, 1), botBg = at(4, ch - 2);
   const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
   const x = cv.getContext("2d")!;
-  x.save(); x.beginPath(); x.roundRect(0, 0, w, h, r); x.clip();
-  if (top) { x.fillStyle = rgb(topBg); x.fillRect(0, 0, w, top + 2); }
-  if (bot) { x.fillStyle = rgb(botBg); x.fillRect(0, top + ch - 2, w, bot + 2); }
-  x.drawImage(img, 0, top);
-  if (mode === "included" && o.repaint) { x.fillStyle = rgb(topBg); x.fillRect(0, 0, w, Math.round(sp.top * u)); }
-  const family = c.fonts.text?.family ?? c.fonts.display?.family ?? "sans-serif";
-  if (top || (mode === "included" && o.repaint)) drawStatusBar(x, kind, w, u, luminance(topBg) < 0.5 ? "#ffffff" : "#0b0b0d", family);
-  if (bot) {
-    x.fillStyle = luminance(botBg) < 0.5 ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.88)";
-    const len = kind === "ipad" ? 160 : kind === "iphone" ? 134 : 108;
-    x.beginPath(); x.roundRect(w / 2 - (len * u) / 2, h - 13 * u, len * u, 5 * u, 2.5 * u); x.fill();
-  }
-  x.restore();
+  // The status bar is kit chrome: its text is not page copy.
+  drawInternal(cv, () => {
+    x.save(); x.beginPath(); x.roundRect(0, 0, w, h, r); x.clip();
+    if (top) { x.fillStyle = rgb(topBg); x.fillRect(0, 0, w, top + 2); }
+    if (bot) { x.fillStyle = rgb(botBg); x.fillRect(0, top + ch - 2, w, bot + 2); }
+    x.drawImage(img, 0, top);
+    if (mode === "included" && o.repaint) { x.fillStyle = rgb(topBg); x.fillRect(0, 0, w, Math.round(sp.top * u)); }
+    const family = c.fonts.text?.family ?? c.fonts.display?.family ?? "sans-serif";
+    if (top || (mode === "included" && o.repaint)) drawStatusBar(x, kind, w, u, luminance(topBg) < 0.5 ? "#ffffff" : "#0b0b0d", family);
+    if (bot) {
+      x.fillStyle = luminance(botBg) < 0.5 ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.88)";
+      const len = kind === "ipad" ? 160 : kind === "iphone" ? 134 : 108;
+      x.beginPath(); x.roundRect(w / 2 - (len * u) / 2, h - 13 * u, len * u, 5 * u, 2.5 * u); x.fill();
+    }
+    x.restore();
+  });
   return { url: cv.toDataURL("image/png"), w, h, r, capTop: top, capW: cw, capH: ch };
 }
 
@@ -115,7 +127,7 @@ export async function device(o: DeviceOptions): Promise<Device> {
   const c = ctx();
   const kind = KIND[c.target.platform];
   const file = c.captures.files[o.capture];
-  if (!file) throw new Error(`No capture "${o.capture}" for ${c.target.platform} (looked in inputs/${c.target.platform}/)`);
+  if (!file) throw missingCapture(c, o.capture);
   if (file.fallback) state.warnings.push(`capture.fallback: "${o.capture}" for ${c.locale.code} uses ${file.url}`);
   const image = await waitFor(loadImage(file.url));
   const scr = composeScreen(image, o);

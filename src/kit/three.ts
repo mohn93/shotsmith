@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { composeScreen } from "./device.js";
+import { composeScreen, missingCapture } from "./device.js";
 import { ctx, state, waitFor } from "./runtime.js";
 
 export function createRenderer(o: { supersample?: number; z?: number } = {}): THREE.WebGLRenderer {
@@ -63,7 +63,7 @@ export async function phone3d(o: { capture: string; width: number; finish?: "gra
   const c = ctx();
   if (c.target.platform !== "iphone" && c.target.platform !== "android-phone") throw new Error(`phone3d supports phone targets only, not ${c.target.platform}`);
   const file = c.captures.files[o.capture];
-  if (!file) throw new Error(`No capture "${o.capture}" for ${c.target.platform} (looked in inputs/${c.target.platform}/)`);
+  if (!file) throw missingCapture(c, o.capture);
   if (file.fallback) state.warnings.push(`capture.fallback: "${o.capture}" for ${c.locale.code} uses ${file.url}`);
   const img = await waitFor(loadImage(file.url));
   const scr = composeScreen(img, { repaint: o.repaint });

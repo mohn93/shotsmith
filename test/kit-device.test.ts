@@ -48,7 +48,7 @@ describe("device", () => {
   });
 
   it("fails clearly when a capture is missing", async () => {
-    await expect(render("device-missing", "iphone-6.9")).rejects.toThrow(/No capture "nothere" for iphone/);
+    await expect(render("device-missing", "iphone-6.9")).rejects.toThrow(/No capture "nothere" for iphone \(looked in inputs\/iphone\/en\/, inputs\/iphone\/\); available: home/);
   });
 
   for (const target of ["iphone-6.9", "android-phone", "ipad-13", "android-tablet"]) {
