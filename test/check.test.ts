@@ -61,7 +61,7 @@ describe("checks", () => {
   it("turns sidecars into findings", () => {
     const dir = ws(["android-phone"], ["a"]);
     const cfg = loadConfig(dir);
-    const text = { el: 0, claim: "h", chrome: false, text: "Hi", box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: true, clipped: false, safeArea: true, shrink: 0.7, covered: false, fallbackFonts: ["Geeza Pro"] };
+    const text = { el: 0, claim: "h", text: "Hi", box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: true, clipped: false, safeArea: true, shrink: 0.7, covered: false, fallbackFonts: ["Geeza Pro"] };
     const sc: Sidecar = { page: "a", target: "android-phone", locale: "en", kit: true, texts: [text], captures: [], devices: [], lifts: 0, requests: { captures: [], fonts: [] }, changedAfterReady: false, generated: [], claimsShown: [],
       fonts: [{ family: "Shotsmith display", weight: "700", url: "/sysfont/SF-Pro-Display-Bold.otf", status: "loaded" }], warnings: ["capture.fallback: x"],
       servedFonts: [{ url: "/sysfont/SF-Pro-Display-Bold.otf", names: ["SF Pro Display", "SFProDisplay-Bold"], appleOnly: true }] };
@@ -73,7 +73,7 @@ describe("checks", () => {
 
   it("reports Apple-only fonts on Play targets by the names inside the font, whatever the file is called", () => {
     const cfg = loadConfig(ws(["android-phone", "iphone-6.9"], ["a"]));
-    const text = (t: string, fallbackFonts: string[], usedFonts: string[]) => ({ el: 0, claim: "h", chrome: false, text: t, box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: false, clipped: false, safeArea: false, shrink: null, covered: true, fallbackFonts, usedFonts });
+    const text = (t: string, fallbackFonts: string[], usedFonts: string[]) => ({ el: 0, claim: "h", text: t, box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: false, clipped: false, safeArea: false, shrink: null, covered: true, fallbackFonts, usedFonts });
     const sc = (target: string): Sidecar => ({ page: "a", target, locale: "en", kit: true, captures: [], devices: [], lifts: 0, requests: { captures: [], fonts: [] }, changedAfterReady: false, generated: [], claimsShown: [], fonts: [], warnings: [],
       servedFonts: [{ url: "/fonts/Brand.otf", names: ["SF Compact Display", "SFCompactDisplay-Bold"], appleOnly: true }, { url: "/fonts/Inter.ttf", names: ["Inter"], appleOnly: false }],
       texts: [text("Brand", [], ["SF Compact Display", "SFCompactDisplay-Bold"]), text("Sys", [".SF NS"], [".SF NS", ".SFNS-Regular"]), text("Sys again", [".SF NS"], [".SF NS"]), text("Data", [], ["New York", "NewYork-Bold"]), text("Ok", [], ["Inter"])] });
@@ -114,7 +114,7 @@ describe("checks", () => {
 
   it("reports characters the configured font has no glyph for", () => {
     const cfg = loadConfig(ws(["android-phone"], ["a"]));
-    const text = { el: 0, claim: "h", chrome: false, text: "Tap \uE001", box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: false, clipped: false, safeArea: false, shrink: null, covered: false, fallbackFonts: [], missingGlyphs: ["U+E001"] };
+    const text = { el: 0, claim: "h", text: "Tap \uE001", box: [0, 0, 10, 10] as [number, number, number, number], font: "x", overflow: false, clipped: false, safeArea: false, shrink: null, covered: false, fallbackFonts: [], missingGlyphs: ["U+E001"] };
     const sc: Sidecar = { page: "a", target: "android-phone", locale: "en", kit: true, texts: [text], captures: [], devices: [], lifts: 0, requests: { captures: [], fonts: [] }, changedAfterReady: false, generated: [], claimsShown: [], servedFonts: [], fonts: [], warnings: [] };
     const f = checkSidecars(cfg, [sc]);
     expect(f).toEqual([expect.objectContaining({ rule: "text.coverage", severity: "error", message: expect.stringContaining("U+E001") })]);

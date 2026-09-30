@@ -1,5 +1,5 @@
 export interface SidecarText {
-  el: number; claim: string | null; chrome: boolean; text: string; box: [number, number, number, number]; font: string;
+  el: number; claim: string | null; text: string; box: [number, number, number, number]; font: string;
   overflow: boolean; clipped: boolean; safeArea: boolean; shrink: number | null; covered: boolean; fallbackFonts: string[];
   // Code points (U+XXXX) no face of the configured font has a glyph for; Chromium draws them as tofu or with a system font.
   missingGlyphs?: string[];
@@ -12,12 +12,11 @@ export interface SidecarDevice { platform: string; capture: string; statusBar: "
 // in the page (an OffscreenCanvas, a detached canvas) has box [0, 0, 0, 0] because where its pixels end up is unknown.
 export interface SidecarGenerated {
   // alt: the alt text of an <img> or <input type=image> shown because the image is not drawn.
-  kind: "pseudo" | "marker" | "canvas" | "frame" | "form" | "svgImage" | "shadowClosed" | "alt";
-  // The text shown, or the element description for frames, forms and closed shadow roots.
+  // svgUnreadable: an SVG image the kit could not fetch or read, so any text it draws is unknown.
+  kind: "pseudo" | "marker" | "canvas" | "frame" | "form" | "svgImage" | "svgUnreadable" | "shadowClosed" | "alt";
+  // The text shown, the element description for frames, forms and closed shadow roots, or the URL of an unreadable SVG.
   text: string;
   box: [number, number, number, number];
-  // Inside [data-chrome].
-  chrome: boolean;
 }
 // What a [data-claim] element visibly shows: its visible text nodes, whitespace collapsed.
 export interface SidecarClaimShown { claim: string; text: string; box: [number, number, number, number] }

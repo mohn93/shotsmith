@@ -10,13 +10,17 @@ const render = (ws: string, page: string, target: string, locale: string) =>
   withRenderer(ws, (r) => renderPage(r, { page, target, locale, out: outPath(r.cfg, locale, target, page) }));
 
 describe("kit core", () => {
-  it("traces claims, chrome and untraced text", async () => {
-    const { sidecar } = await render(tmpWorkspace("kit"), "texts", "iphone-6.9", "en");
+  it("traces claims and untraced text, with no exemption for data-chrome", async () => {
+    const sidecarWs = tmpWorkspace("kit");
+    const { sidecar } = await render(sidecarWs, "texts", "iphone-6.9", "en");
     expect(sidecar.kit).toBe(true);
     const byText = (s: string) => sidecar.texts.find((x) => x.text.startsWith(s))!;
-    expect(byText("Fresh ideas")).toMatchObject({ claim: "headline", chrome: false, overflow: false, covered: true, missingGlyphs: [] });
-    expect(byText("Untraced")).toMatchObject({ claim: null, chrome: false });
-    expect(byText("9:41")).toMatchObject({ chrome: true });
+    expect(byText("Fresh ideas")).toMatchObject({ claim: "headline", overflow: false, covered: true, missingGlyphs: [] });
+    expect(byText("Untraced")).toMatchObject({ claim: null });
+    expect(byText("9:41")).toMatchObject({ claim: null });
+    expect(byText("9:41")).not.toHaveProperty("chrome");
+    const untraced = checkClaims(loadConfig(sidecarWs), loadClaims(sidecarWs), [sidecar]).filter((f) => f.rule === "claims.untraced");
+    expect(untraced.map((f) => f.message)).toContainEqual(expect.stringMatching(/^"9:41" is visible text outside a claim element/));
     expect(byText("A headline")).toMatchObject({ claim: "long", overflow: true });
     expect(sidecar.texts.filter((x) => x.claim === "headline").some((x) => x.clipped && x.safeArea)).toBe(true);
     expect(sidecar.fonts.map((f) => f.family).sort()).toEqual(["Shotsmith display", "Shotsmith text"]);

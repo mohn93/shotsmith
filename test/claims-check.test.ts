@@ -6,10 +6,10 @@ import { loadConfig } from "../src/config/schema.js";
 import type { Sidecar, SidecarClaimShown, SidecarGenerated, SidecarText } from "../src/shared/sidecar.js";
 import { tempDir } from "./helpers.js";
 
-const text = (claim: string | null, chrome = false, shown = "x"): SidecarText => ({ el: 0, claim, chrome, text: shown, box: [0, 0, 1, 1], font: "", overflow: false, clipped: false, safeArea: false, shrink: null, covered: true, fallbackFonts: [] });
+const text = (claim: string | null, shown = "x"): SidecarText => ({ el: 0, claim, text: shown, box: [0, 0, 1, 1], font: "", overflow: false, clipped: false, safeArea: false, shrink: null, covered: true, fallbackFonts: [] });
 const sidecar = (locale: string, o: Partial<Sidecar> = {}): Sidecar => ({ page: "a", target: "iphone-6.9", locale, kit: true, texts: [], fonts: [], captures: [], devices: [], lifts: 0, warnings: [], requests: { captures: [], fonts: [] }, changedAfterReady: false, generated: [], claimsShown: [], servedFonts: [], ...o });
 const shown = (claim: string, t: string): SidecarClaimShown => ({ claim, text: t, box: [0, 0, 1, 1] });
-const gen = (kind: SidecarGenerated["kind"], t: string, chrome = false): SidecarGenerated => ({ kind, text: t, box: [0, 0, 1, 1], chrome });
+const gen = (kind: SidecarGenerated["kind"], t: string): SidecarGenerated => ({ kind, text: t, box: [0, 0, 1, 1] });
 
 function config(locales: string[]) {
   const dir = tempDir("cc-");
@@ -21,8 +21,9 @@ describe("checkClaims", () => {
   it("reports untraced, unknown and unused claims", () => {
     const cfg = config(["en"]);
     const claims = { used: { source: "s", text: { en: "x" } }, spare: { source: "s", text: { en: "y" } } };
-    const f = checkClaims(cfg, claims, [sidecar("en", { texts: [text("used"), text(null), text(null, true), text("ghost")], claimsShown: [shown("used", "x"), shown("ghost", "x")] })]);
+    const f = checkClaims(cfg, claims, [sidecar("en", { texts: [text("used"), text(null), text("ghost")], claimsShown: [shown("used", "x"), shown("ghost", "x")] })]);
     expect(f.map((x) => `${x.severity}:${x.rule}`).sort()).toEqual(["error:claims.unknown", "error:claims.untraced", "warning:claims.unused"]);
+    expect(f.find((x) => x.rule === "claims.untraced")!.message).toBe('"x" is visible text outside a claim element; put it inside a claim element (t.el(), headline() or an element with data-claim)');
   });
 
   it("requires each claim element to show exactly the claim's text for the locale, ignoring whitespace", () => {
@@ -48,12 +49,19 @@ describe("checkClaims", () => {
     expect(f[0].message).toMatch(/shows "\.\.\.[^"]*with two lists[^"]*" but its en text is "\.\.\.[^"]*with one list[^"]*" \(they differ from character \d+\)/);
   });
 
-  it("reports every generated text that is not chrome, with its kind", () => {
+  it("reports every generated text with its kind", () => {
     const cfg = config(["en"]);
     const kinds: SidecarGenerated["kind"][] = ["pseudo", "marker", "canvas", "frame", "form", "svgImage", "shadowClosed", "alt"];
-    const f = checkClaims(cfg, {}, [sidecar("en", { generated: [...kinds.map((k) => gen(k, "Free forever")), gen("canvas", "9:41", true)] })]);
+    const f = checkClaims(cfg, {}, [sidecar("en", { generated: kinds.map((k) => gen(k, "Free forever")) })]);
     expect(f.map((x) => x.rule)).toEqual(kinds.map(() => "claims.untraced"));
     kinds.forEach((k, i) => expect(f[i].message).toMatch(new RegExp(`^${k}: "Free forever"`)));
+  });
+
+  it("says an unreadable SVG image could not be checked, not that its URL is drawn text", () => {
+    const cfg = config(["en"]);
+    const f = checkClaims(cfg, {}, [sidecar("en", { generated: [gen("svgUnreadable", "https://cdn.example.com/bg.svg")] })]);
+    expect(f.map((x) => x.rule)).toEqual(["claims.untraced"]);
+    expect(f[0].message).toMatch(/^could not read SVG image "https:\/\/cdn\.example\.com\/bg\.svg" to check it for text; /);
   });
 
   it("ignores punctuation and symbol decoration in pseudo content and markers, but not counters or words", () => {

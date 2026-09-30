@@ -26,10 +26,15 @@ describe("kit evidence: generated text", () => {
     ["input", "form"], ["textarea", "form"], ["svg-bg", "svgImage"]] as const) {
     it(`records ${page} as ${kind}`, async () => {
       const s = await render(page);
-      expect(free(s)).toEqual([expect.objectContaining({ kind, chrome: false })]);
+      expect(free(s)).toEqual([expect.objectContaining({ kind })]);
       expect(s.claimsShown).toContainEqual(expect.objectContaining({ claim: "headline", text: HEADLINE }));
     });
   }
+
+  it("records an SVG image it cannot read as svgUnreadable, not as drawn text", async () => {
+    const s = await render("svg-unreadable");
+    expect(s.generated).toEqual([expect.objectContaining({ kind: "svgUnreadable", text: expect.stringMatching(/^blob:/) })]);
+  });
 
   it("records a DOM canvas at its box", async () => {
     const [g] = free(await render("canvas"));
@@ -47,7 +52,7 @@ describe("kit evidence: generated text", () => {
 
   it("traces text in an open shadow root like page text", async () => {
     const s = await render("shadow-open");
-    expect(s.texts).toContainEqual(expect.objectContaining({ text: "Free forever", claim: null, chrome: false }));
+    expect(s.texts).toContainEqual(expect.objectContaining({ text: "Free forever", claim: null }));
     expect(s.generated).toEqual([]);
   });
 
@@ -59,13 +64,13 @@ describe("kit evidence: generated text", () => {
 
   it("records a closed shadow root that existed before the kit loaded", async () => {
     const s = await render("shadow-early");
-    expect(s.generated).toEqual([expect.objectContaining({ kind: "shadowClosed", chrome: false })]);
+    expect(s.generated).toEqual([expect.objectContaining({ kind: "shadowClosed" })]);
     expect(s.generated[0].text).toMatch(/div#early/);
   });
 
   it("records canvas text drawn by a classic script before the kit loads", async () => {
     const s = await render("classic-canvas");
-    expect(free(s)).toEqual([expect.objectContaining({ kind: "canvas", chrome: false })]);
+    expect(free(s)).toEqual([expect.objectContaining({ kind: "canvas" })]);
     expect(free(s)[0].box[2]).toBeGreaterThan(0);
   });
 

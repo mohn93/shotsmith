@@ -280,7 +280,6 @@ function collectTexts(): SidecarText[] {
       out.push({
         el: ids.get(el)!,
         claim: claimEl?.dataset.claim ?? null,
-        chrome: !!composedClosest(el, "[data-chrome]"),
         text: collapse(n.nodeValue ?? ""),
         box: boxOf(r),
         font: getComputedStyle(el).fontFamily,
@@ -429,25 +428,30 @@ function isSvgUrl(u: string): boolean {
   try { return /\.svgz?$/i.test(new URL(u, location.href).pathname); } catch { return false; }
 }
 
-// The text of every <text> and <foreignObject> in an SVG image, and of SVG data URLs it embeds. null if unreadable.
-async function svgTexts(url: string, depth = 0): Promise<string[] | null> {
+// The text of every <text> and <foreignObject> in an SVG image, and of SVG data URLs it embeds, plus the SVG images
+// that could not be read (so their text is unknown).
+async function svgTexts(url: string, depth = 0): Promise<{ texts: string[]; unreadable: string[] }> {
   let src: string;
   try {
     const res = await fetch(url);
-    if (!res.ok) return null;
-    if (url.startsWith("blob:") && !/svg/i.test(res.headers.get("content-type") ?? "")) return [];
+    if (!res.ok) return { texts: [], unreadable: [url] };
+    if (url.startsWith("blob:") && !/svg/i.test(res.headers.get("content-type") ?? "")) return { texts: [], unreadable: [] };
     src = await res.text();
-  } catch { return null; }
+  } catch { return { texts: [], unreadable: [url] }; }
   const doc = new DOMParser().parseFromString(src, "image/svg+xml");
-  if (doc.querySelector("parsererror")) return []; // an SVG that does not parse is not drawn
-  const out = Array.from(doc.querySelectorAll("text, foreignObject"), (n) => collapse(n.textContent ?? "")).filter(Boolean);
+  if (doc.querySelector("parsererror")) return { texts: [], unreadable: [] }; // an SVG that does not parse is not drawn
+  const texts = Array.from(doc.querySelectorAll("text, foreignObject"), (n) => collapse(n.textContent ?? "")).filter(Boolean);
+  const unreadable: string[] = [];
   if (depth < 3) {
     for (const img of Array.from(doc.querySelectorAll("image, feImage"))) {
       const href = img.getAttribute("href") ?? img.getAttributeNS("http://www.w3.org/1999/xlink", "href");
-      if (href && /^data:image\/svg\+xml[;,]/i.test(href)) out.push(...((await svgTexts(href, depth + 1)) ?? [`unreadable SVG image inside ${url.slice(0, 80)}`]));
+      if (!href || !/^data:image\/svg\+xml[;,]/i.test(href)) continue;
+      const inner = await svgTexts(href, depth + 1);
+      texts.push(...inner.texts);
+      unreadable.push(...inner.unreadable.map((u) => `${u.slice(0, 40)}... inside ${url.slice(0, 80)}`));
     }
   }
-  return out;
+  return { texts, unreadable };
 }
 
 // An image that is not drawn shows its alt text instead. An <img> with no source at all (no src, no usable srcset or
@@ -471,7 +475,7 @@ async function collectGenerated(): Promise<SidecarGenerated[]> {
   const out: SidecarGenerated[] = [];
   const add = (kind: SidecarGenerated["kind"], text: string, el: Element | null, box?: Box) => {
     const t = collapse(text);
-    if (t) out.push({ kind, text: t, box: box ?? (el ? boxOf(el.getBoundingClientRect()) : EMPTY), chrome: !!el && !!composedClosest(el, "[data-chrome]") });
+    if (t) out.push({ kind, text: t, box: box ?? (el ? boxOf(el.getBoundingClientRect()) : EMPTY) });
   };
   const rs = roots();
   const els = rs.flatMap((r) => Array.from(r.querySelectorAll("*")));
@@ -515,11 +519,13 @@ async function collectGenerated(): Promise<SidecarGenerated[]> {
     for (const url of urls) svgs.push({ url, el: inPage ? canvas : null, box: inPage ? undefined : EMPTY });
   }
 
-  const fetched = new Map<string, Promise<string[] | null>>();
+  const fetched = new Map<string, ReturnType<typeof svgTexts>>();
   for (const s of svgs) if (s.url && isSvgUrl(s.url) && !fetched.has(s.url)) fetched.set(s.url, svgTexts(s.url));
   for (const s of svgs) {
-    const texts = s.url && fetched.has(s.url) ? await fetched.get(s.url)! : [];
-    for (const text of texts ?? [`unreadable SVG image ${s.url.slice(0, 80)}`]) add("svgImage", text, s.el, s.box);
+    const found = s.url && fetched.has(s.url) ? await fetched.get(s.url)! : null;
+    if (!found) continue;
+    for (const text of found.texts) add("svgImage", text, s.el, s.box);
+    for (const url of found.unreadable) add("svgUnreadable", url.slice(0, 120), s.el, s.box);
   }
 
   // One entry per distinct thing shown (mask-image and -webkit-mask-image name the same image, for one).

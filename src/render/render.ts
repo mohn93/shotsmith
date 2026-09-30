@@ -294,12 +294,8 @@ async function applyCoverage(tab: Page, sidecar: Sidecar, fonts: KitContext["fon
 // Describes a closed shadow root's host; runs in the page with the host as this.
 function describeClosedHost(this: Element): SidecarGenerated {
   const r = this.getBoundingClientRect();
-  let chrome = false;
-  for (let n: Node | null = this; n && !chrome; n = n.parentNode instanceof ShadowRoot ? n.parentNode.host : n.parentNode) {
-    chrome = n instanceof Element && n.hasAttribute("data-chrome");
-  }
   const name = `${this.localName}${this.id ? `#${this.id}` : ""}${this.classList.length ? `.${Array.from(this.classList).join(".")}` : ""}`;
-  return { kind: "shadowClosed", text: `${name} has a closed shadow root`, box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], chrome };
+  return { kind: "shadowClosed", text: `${name} has a closed shadow root`, box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] };
 }
 
 // A page cannot read a closed shadow root, but the DevTools protocol can: one entry per closed root that still exists

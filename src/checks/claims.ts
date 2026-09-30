@@ -42,6 +42,7 @@ const HOW: Record<SidecarGenerated["kind"], string> = {
   frame: "shown in a frame, which the checks cannot read",
   form: "shown by a form control",
   svgImage: "drawn by an SVG image",
+  svgUnreadable: "an SVG image that could not be read",
   shadowClosed: "inside a closed shadow root, which the checks cannot read",
   alt: "shown as the alt text of an image that is not drawn",
 };
@@ -61,8 +62,8 @@ export function checkClaims(cfg: ResolvedConfig, claims: Claims, sidecars: Sidec
     };
     for (const t of s.texts) {
       if (t.claim) known(t.claim);
-      else if (!t.chrome && s.kit) {
-        out.push(err("claims.untraced", `"${oneLine(t.text).slice(0, 40)}" is visible text not taken from claims.json; use t() or t.el()`, where));
+      else if (s.kit) {
+        out.push(err("claims.untraced", `"${oneLine(t.text).slice(0, 40)}" is visible text outside a claim element; put it inside a claim element (t.el(), headline() or an element with data-claim)`, where));
       }
     }
     // data-claim alone proves nothing: each claim element must show exactly the claim's text for this locale.
@@ -74,9 +75,13 @@ export function checkClaims(cfg: ResolvedConfig, claims: Claims, sidecars: Sidec
       }
     }
     for (const g of s.generated) {
-      if (g.chrome || ((g.kind === "pseudo" || g.kind === "marker") && DECORATION.test(g.text))) continue;
+      if ((g.kind === "pseudo" || g.kind === "marker") && DECORATION.test(g.text)) continue;
+      if (g.kind === "svgUnreadable") {
+        out.push(err("claims.untraced", `could not read SVG image ${quote(g.text)} to check it for text; serve it from the workspace (pages/ or inputs/) or use a raster image`, where));
+        continue;
+      }
       const counter = isCounter(g) ? "; numbered lists must put their numbers in claim text (use list-style: none)" : "";
-      out.push(err("claims.untraced", `${g.kind}: ${quote(g.text)} is ${HOW[g.kind] ?? "generated"}${counter}, not taken from claims.json; show claims with t() or t.el()`, where));
+      out.push(err("claims.untraced", `${g.kind}: ${quote(g.text)} is ${HOW[g.kind] ?? "generated"}${counter}, not taken from claims.json; show the text as DOM text inside a claim element (t.el(), headline() or an element with data-claim)`, where));
     }
   }
   for (const id of Object.keys(claims)) if (!used.has(id)) out.push(warn("claims.unused", `"${id}" is not shown on any screen`));
