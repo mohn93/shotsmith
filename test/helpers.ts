@@ -24,3 +24,22 @@ export async function pixel(file: string, x: number, y: number): Promise<[number
   const { data } = await sharp(file).extract({ left: x, top: y, width: 1, height: 1 }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   return [data[0], data[1], data[2]];
 }
+
+// Compares a render with a committed baseline for this OS. A missing baseline is written and the test fails,
+// so a person reviews it before committing. Tolerance: mean channel difference below 2 and under 0.5% of
+// pixels differing by more than 32.
+export async function compareBaseline(file: string, name: string): Promise<void> {
+  const dir = path.join(ROOT, "test/baselines", process.platform === "darwin" ? "darwin" : "linux");
+  const base = path.join(dir, `${name}.png`);
+  if (!fs.existsSync(base)) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(file, base);
+    throw new Error(`Baseline created at ${base}; review it and commit it`);
+  }
+  const [a, b] = await Promise.all([file, base].map((f) => sharp(f).removeAlpha().raw().toBuffer({ resolveWithObject: true })));
+  if (a.info.width !== b.info.width || a.info.height !== b.info.height) throw new Error(`${name}: size differs from baseline`);
+  let sum = 0, big = 0;
+  for (let i = 0; i < a.data.length; i++) { const d = Math.abs(a.data[i] - b.data[i]); sum += d; if (d > 32) big++; }
+  const mean = sum / a.data.length, share = big / a.data.length;
+  if (mean >= 2 || share >= 0.005) throw new Error(`${name}: differs from baseline (mean ${mean.toFixed(2)}, ${(share * 100).toFixed(2)}% changed)`);
+}
