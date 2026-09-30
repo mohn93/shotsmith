@@ -28,4 +28,16 @@ describe("claims file", () => {
     expect(f.find((x) => x.rule === "claims.locale")).toMatchObject({ severity: "error", locale: "de" });
     expect(formatFinding(f[0])).toMatch(/^error claims\./);
   });
+
+  it("throws on schema-invalid claims.json", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claims-"));
+    fs.writeFileSync(path.join(dir, "claims.json"), JSON.stringify({ "bad id!": { source: "s", text: {} } }));
+    expect(() => loadClaims(dir)).toThrow(/claims\.json/);
+  });
+
+  it("throws on malformed claims.json", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claims-"));
+    fs.writeFileSync(path.join(dir, "claims.json"), '{"a": ,}');
+    expect(() => loadClaims(dir)).toThrow(/claims\.json/);
+  });
 });

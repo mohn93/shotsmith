@@ -9,7 +9,13 @@ export type Claims = z.infer<typeof Schema>;
 export function loadClaims(root: string): Claims {
   const file = path.join(root, "claims.json");
   if (!fs.existsSync(file)) return {};
-  const parsed = Schema.safeParse(JSON.parse(fs.readFileSync(file, "utf8")));
+  let data: unknown;
+  try {
+    data = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (e) {
+    throw new Error(`claims.json: invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const parsed = Schema.safeParse(data);
   if (!parsed.success) throw new Error(`claims.json: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   return parsed.data;
 }
