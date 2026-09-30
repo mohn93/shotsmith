@@ -131,6 +131,41 @@ describe("build", () => {
     expect(fs.existsSync(`${ws}/export/REPORT.md`)).toBe(true);
   });
 
+  it("does not write the report through a linked REPORT.md", async () => {
+    const ws = prepare();
+    await allCaptures(ws);
+    const outside = tempDir("outside-report-");
+    fs.writeFileSync(`${outside}/notes.md`, "keep");
+    fs.mkdirSync(`${ws}/export`, { recursive: true });
+    fs.symlinkSync(`${outside}/notes.md`, `${ws}/export/REPORT.md`);
+    const { code, out } = cli(ws, "build", "-l", "en", "-t", "android-phone");
+    expect(code).toBe(1);
+    const res = JSON.parse(out);
+    expect(res.errors).toContainEqual(expect.objectContaining({ rule: "store.linked", message: expect.stringMatching(/^export\/REPORT\.md is a link/) }));
+    expect(res.report).toBe("");
+    expect(fs.readFileSync(`${outside}/notes.md`, "utf8")).toBe("keep");
+    expect(fs.lstatSync(`${ws}/export/REPORT.md`).isSymbolicLink()).toBe(true);
+  });
+
+  it("removes a removed locale's folder that holds only .DS_Store files", async () => {
+    const ws = prepare();
+    await allCaptures(ws);
+    for (const d of ["fr", "fr/android-phone"]) {
+      fs.mkdirSync(`${ws}/export/${d}`, { recursive: true });
+      fs.writeFileSync(`${ws}/export/${d}/.DS_Store`, "finder");
+    }
+    fs.writeFileSync(`${ws}/export/fr/android-phone/screen.jpg`, "x");
+    fs.mkdirSync(`${ws}/export/it`, { recursive: true });
+    fs.writeFileSync(`${ws}/export/it/.DS_Store`, "finder");
+    fs.writeFileSync(`${ws}/export/it/notes.txt`, "keep");
+    const { code, out } = cli(ws, "build", "-l", "en", "-t", "android-phone");
+    const res = JSON.parse(out);
+    expect(res.errors.map((e: any) => `${e.rule} ${e.message.split(" ")[0]}`)).toEqual(["store.stale export/it/"]);
+    expect(code).toBe(1);
+    expect(fs.existsSync(`${ws}/export/fr`)).toBe(false);
+    expect(fs.readdirSync(`${ws}/export/it`).sort()).toEqual([".DS_Store", "notes.txt"]);
+  });
+
   it("rejects unknown targets and locales and invalid --jobs", () => {
     const ws = prepare();
     const t = cliErr(ws, "build", "-t", "iphone-69");

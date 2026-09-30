@@ -16,10 +16,14 @@ export interface BuildResult { rendered: RenderResult[]; failures: { job: Render
 
 const lstatOrNull = (p: string): fs.Stats | null => { try { return fs.lstatSync(p); } catch { return null; } };
 
-// Removes dir and the folders inside it that are empty, bottom up; never follows links and never removes a file.
+// Removes dir and the folders inside it that are empty, bottom up, never following links. A folder holding only
+// Finder's .DS_Store counts as empty; that file goes with it. No other file is removed.
 function removeEmptyFolders(dir: string): void {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) removeEmptyFolders(path.join(dir, e.name));
-  if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+  const left = fs.readdirSync(dir, { withFileTypes: true });
+  if (!left.every((e) => e.isFile() && e.name === ".DS_Store")) return;
+  for (const e of left) fs.rmSync(path.join(dir, e.name));
+  fs.rmdirSync(dir);
 }
 
 export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<BuildResult> {
@@ -112,8 +116,10 @@ function writeReport(cfg: ResolvedConfig, jobs: RenderJob[], rendered: RenderRes
     ...warnings.map((f) => `- ${formatFinding(f)}`), "",
   ];
   const file = path.join(cfg.root, cfg.output, "REPORT.md");
-  // A linked output folder is reported as store.linked; the report is not written through it.
+  // A linked output folder or REPORT.md is reported as store.linked; the report is not written through it.
   if (!reachedWithoutLinks(cfg.root, path.dirname(file))) return "";
+  const existing = lstatOrNull(file);
+  if (existing && !existing.isFile()) return "";
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, lines.join("\n"));
   return file;
