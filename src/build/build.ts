@@ -44,11 +44,17 @@ export async function build(cfg: ResolvedConfig, o: BuildOptions = {}): Promise<
     const pngs: string[] = [];
     for (const page of cfg.pages) {
       const png = outPath(cfg, l.code, t.name, page);
-      if (!rendered.some((x) => x.out === png)) continue;
+      if (!rendered.some((x) => x.out === png)) {
+        // The page failed to render; drop its old export so check reports it missing.
+        if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) if (/\.(jpe?g|png)$/i.test(f) && f.replace(/\.[^.]+$/, "") === page) fs.rmSync(path.join(dir, f));
+        continue;
+      }
       await encodeJpeg(png, exportPath(cfg, l.code, t.name, page));
       pngs.push(png);
     }
-    if (pngs.length) await contactSheet(pngs, path.join(cfg.root, cfg.output, "contact-sheets", `${l.code}-${t.name}.jpg`));
+    const sheet = path.join(cfg.root, cfg.output, "contact-sheets", `${l.code}-${t.name}.jpg`);
+    if (pngs.length) await contactSheet(pngs, sheet);
+    else fs.rmSync(sheet, { force: true });
   }
 
   const scope = (f: Where) => (!f.locale || locales.some((l) => l.code === f.locale)) && (!f.target || targets.some((t) => t.name === f.target));

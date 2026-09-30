@@ -28,14 +28,18 @@ const cliErr = (ws: string, ...args: string[]) => {
   catch (e: any) { return { code: e.status as number, err: String(e.stderr) }; }
 };
 
+async function allCaptures(ws: string): Promise<void> {
+  await makeCaptures(ws);
+  fs.mkdirSync(`${ws}/inputs/iphone/de`, { recursive: true });
+  fs.copyFileSync(`${ws}/inputs/iphone/en/home.png`, `${ws}/inputs/iphone/de/home.png`);
+  fs.mkdirSync(`${ws}/inputs/android-phone/de`, { recursive: true });
+  fs.copyFileSync(`${ws}/inputs/android-phone/en/home.png`, `${ws}/inputs/android-phone/de/home.png`);
+}
+
 describe("build", () => {
   it("renders the matrix, exports store-ready JPEGs and passes the checks", async () => {
     const ws = prepare();
-    await makeCaptures(ws);
-    fs.mkdirSync(`${ws}/inputs/iphone/de`, { recursive: true });
-    fs.copyFileSync(`${ws}/inputs/iphone/en/home.png`, `${ws}/inputs/iphone/de/home.png`);
-    fs.mkdirSync(`${ws}/inputs/android-phone/de`, { recursive: true });
-    fs.copyFileSync(`${ws}/inputs/android-phone/en/home.png`, `${ws}/inputs/android-phone/de/home.png`);
+    await allCaptures(ws);
     fs.mkdirSync(`${ws}/export/en/iphone-6.9`, { recursive: true });
     fs.writeFileSync(`${ws}/export/en/iphone-6.9/stale.jpg`, "x");
     const { code, out } = cli(ws, "build");
@@ -49,6 +53,27 @@ describe("build", () => {
     }
     expect(fs.existsSync(`${ws}/export/en/iphone-6.9/stale.jpg`)).toBe(false);
     expect(fs.readFileSync(`${ws}/export/REPORT.md`, "utf8")).toMatch(/No errors/);
+  });
+
+  it("removes the outputs of a page that stops rendering, so check fails", async () => {
+    const ws = prepare();
+    await allCaptures(ws);
+    expect(cli(ws, "build", "-l", "en", "-t", "iphone-6.9").code).toBe(0);
+    expect(fs.existsSync(`${ws}/export/en/iphone-6.9/screen.jpg`)).toBe(true);
+    fs.writeFileSync(`${ws}/pages/screen.html`, `<!doctype html><body><script type="module">
+      import { stage } from "shotsmith/kit";
+      await stage();
+      throw new Error("broken on purpose");</script></body></html>`);
+    const b = cli(ws, "build", "-l", "en", "-t", "iphone-6.9");
+    expect(b.code).toBe(1);
+    expect(JSON.parse(b.out).errors.map((e: any) => e.rule)).toContain("render.failed");
+    for (const f of ["out/en/iphone-6.9/screen.png", "out/en/iphone-6.9/screen.json", "export/en/iphone-6.9/screen.jpg", "export/contact-sheets/en-iphone-6.9.jpg"]) {
+      expect(fs.existsSync(`${ws}/${f}`), f).toBe(false);
+    }
+    const c = cli(ws, "check");
+    expect(c.code).toBe(1);
+    const rules = JSON.parse(c.out).errors.filter((e: any) => e.locale === "en" && e.target === "iphone-6.9").map((e: any) => e.rule);
+    expect(rules).toEqual(expect.arrayContaining(["render.missing", "store.missing"]));
   });
 
   it("fails and reports untraced text", async () => {

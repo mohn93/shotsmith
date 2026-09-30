@@ -110,6 +110,11 @@ async function applyCoverage(tab: Page, sidecar: Sidecar, fonts: KitContext["fon
 
 export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderResult> {
   const t = targetOf(r, job.target);
+  if (!r.cfg.locales.some((l) => l.code === job.locale)) throw new Error(`Unknown locale "${job.locale}"`);
+  const sidecarPath = job.out.replace(/\.png$/, ".json");
+  // A failed render must not leave the previous image and sidecar behind for check to pass on.
+  fs.rmSync(job.out, { force: true });
+  fs.rmSync(sidecarPath, { force: true });
   const logs: string[] = [];
   const started = Date.now();
   const tab = await openPage(r, job, logs);
@@ -132,7 +137,6 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
       const c = buildContext(loadConfig(r.cfg.root), loadClaims(r.cfg.root), job.target, job.locale, job.page);
       await applyCoverage(tab, sidecar, c.fonts, r.cfg.root, new Map());
     }
-    const sidecarPath = job.out.replace(/\.png$/, ".json");
     fs.writeFileSync(sidecarPath, JSON.stringify(sidecar, null, 2) + "\n");
     return { ...job, sidecar, sidecarPath, logs, ms: Date.now() - started };
   } finally {
