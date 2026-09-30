@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { version } from "../shared/paths.js";
+import { registerBuild } from "./commands/build.js";
 import { registerCheck } from "./commands/check.js";
 import { registerClaims } from "./commands/claims.js";
 import { registerRender } from "./commands/render.js";
@@ -13,6 +14,7 @@ const program = new Command()
 registerRender(program);
 registerCheck(program);
 registerClaims(program);
+registerBuild(program);
 
 program.parseAsync().catch((e: unknown) => {
   console.error(e instanceof Error ? e.message : String(e));
