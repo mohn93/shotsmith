@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { version } from "../shared/paths.js";
+import { registerCheck } from "./commands/check.js";
 import { registerRender } from "./commands/render.js";
 
 const program = new Command()
@@ -9,6 +10,7 @@ const program = new Command()
   .option("--json", "machine-readable output");
 
 registerRender(program);
+registerCheck(program);
 
 program.parseAsync().catch((e: unknown) => {
   console.error(e instanceof Error ? e.message : String(e));
