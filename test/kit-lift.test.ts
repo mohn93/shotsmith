@@ -30,6 +30,34 @@ describe("lift", () => {
     }
   });
 
+  it("keeps the recess of a tilted lift clean: no source card, no ghost strip", async () => {
+    const ws = tmpWorkspace("kit");
+    await makeCaptures(ws);
+    const res = await withRenderer(ws, (r) => renderPage(r, { page: "lift-tilt", target: "iphone-6.9", locale: "en", out: outPath(r.cfg, "en", "iphone-6.9", "lift-tilt") }));
+    const s = 1290 / 1260, k = 900 / 1170, deg = 12 * Math.PI / 180, P = 4000;
+    // The iPhone frame around a 900 wide screen: bezel 23 + rim 8 on every side, the device origin (180, 260) at its screen.
+    const off = 31, ow = 900 + 2 * off, oh = 2532 * k + 2 * off;
+    const left = 180 - off, top = 260 - off;
+    // A point on the screen plane (capture px) after perspective(4000px) rotateY(12deg) about 50% 40% of the frame, in output px.
+    const project = (cx: number, cy: number): [number, number] => {
+      const x = off + cx * k - ow / 2, y = off + cy * k - oh * 0.4, w = 1 + (x * Math.sin(deg)) / P;
+      return [(left + ow / 2 + (x * Math.cos(deg)) / w) * s, (top + oh * 0.4 + y / w) * s];
+    };
+    // The recess reaches 2 capture px past the region (90, 600, 1080, 900); its fill is the cream to the left of it.
+    const fill = [244, 239, 230];
+    const edges: Array<[string, number, number]> = [];
+    const [lx, ly] = project(88, 750), [rx, ry] = project(1082, 750), [tx, ty] = project(585, 598), [bx, by] = project(585, 902);
+    for (const d of [1, 2]) edges.push([`left +${d}`, Math.round(lx) + d, Math.round(ly)], [`right -${d}`, Math.round(rx) - d, Math.round(ry)],
+      [`top +${d}`, Math.round(tx), Math.round(ty) + d], [`bottom -${d}`, Math.round(bx), Math.round(by) - d]);
+    for (const [name, x, y] of edges) {
+      const p = await pixel(res.out, x, y);
+      expect(p[0] > 200 && p[1] > 200 && p[2] > 200, `${name} is not the red card: ${p}`).toBe(true);
+      for (let c = 0; c < 3; c++) expect(fill[c] - p[c], `${name} channel ${c} is ${p[c]}, ${fill[c] - p[c]} darker than the fill`).toBeLessThanOrEqual(12);
+    }
+    const card = await pixel(res.out, ...project(585, 1800).map(Math.round) as [number, number]);
+    expect(card[0]).toBeGreaterThan(180); expect(card[1]).toBeLessThan(110);       // the lifted card sits at `at`
+  });
+
   it("rejects a covering card that moves or shrinks", async () => {
     const ws = tmpWorkspace("kit");
     await makeCaptures(ws);
