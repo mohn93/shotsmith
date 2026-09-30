@@ -6,7 +6,8 @@ import { loadClaims } from "../config/claims.js";
 import { type ResolvedConfig, loadConfig } from "../config/schema.js";
 import { kitDir } from "../shared/paths.js";
 import type { KitContext } from "../shared/context.js";
-import { type KitSidecar, type Sidecar, domHash, emptySidecar, pageText, sidecarPath } from "../shared/sidecar.js";
+import { installPatches } from "../shared/patches.js";
+import { type KitSidecar, type Sidecar, type SidecarGenerated, domHash, emptySidecar, pageText, sidecarPath } from "../shared/sidecar.js";
 import { launch } from "./browser.js";
 import { buildContext } from "./context.js";
 import { type GlyphCache, fontFileForUrl, openGlyphSources } from "./fonts.js";
@@ -151,6 +152,8 @@ async function openPage(r: Renderer, job: RenderJob, label: string, logs: string
   tab.on("pageerror", (e) => { logs.push(`[pageerror] ${e.message}`); onError(e); });
   const hosts = serverHosts(r.server.url), root = path.resolve(r.cfg.root);
   tab.on("request", (req) => recordRequest(requests, hosts, root, req.url(), req.resourceType() === "font"));
+  // Before any page script, in every frame: canvas text is recorded and shadow roots the page makes are open.
+  await tab.addInitScript(installPatches);
   const q = `t=${encodeURIComponent(job.target)}&l=${encodeURIComponent(job.locale)}`;
   try {
     const res = await tab.goto(`${r.server.url}/pages/${job.page}.html?${q}`, { waitUntil: "load", timeout: r.timeoutMs }).catch((e) => {
@@ -243,6 +246,41 @@ async function applyCoverage(tab: Page, sidecar: Sidecar, fonts: KitContext["fon
   }
 }
 
+// Describes a closed shadow root's host; runs in the page with the host as this.
+function describeClosedHost(this: Element): SidecarGenerated {
+  const r = this.getBoundingClientRect();
+  let chrome = false;
+  for (let n: Node | null = this; n && !chrome; n = n.parentNode instanceof ShadowRoot ? n.parentNode.host : n.parentNode) {
+    chrome = n instanceof Element && n.hasAttribute("data-chrome");
+  }
+  const name = `${this.localName}${this.id ? `#${this.id}` : ""}${this.classList.length ? `.${Array.from(this.classList).join(".")}` : ""}`;
+  return { kind: "shadowClosed", text: `${name} has a closed shadow root`, box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], chrome };
+}
+
+// A page cannot read a closed shadow root, but the DevTools protocol can: one entry per closed root that still exists
+// (from markup, or a script that ran before the patches). Roots inside iframes are the iframe's own; it is reported whole.
+async function closedShadowRoots(tab: Page): Promise<SidecarGenerated[]> {
+  const cdp = await tab.context().newCDPSession(tab);
+  try {
+    const { root } = await cdp.send("DOM.getDocument", { depth: -1, pierce: true });
+    const hosts: number[] = [];
+    const visit = (n: typeof root): void => {
+      for (const sr of n.shadowRoots ?? []) { if (sr.shadowRootType === "closed") hosts.push(n.backendNodeId); visit(sr); }
+      for (const c of n.children ?? []) visit(c);
+    };
+    visit(root);
+    const out: SidecarGenerated[] = [];
+    for (const backendNodeId of hosts) {
+      const { object } = await cdp.send("DOM.resolveNode", { backendNodeId });
+      const { result } = await cdp.send("Runtime.callFunctionOn", { objectId: object.objectId!, functionDeclaration: describeClosedHost.toString(), returnByValue: true });
+      out.push(result.value as SidecarGenerated);
+    }
+    return out;
+  } finally {
+    await cdp.detach();
+  }
+}
+
 export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderResult> {
   const t = targetOf(r, job.target);
   if (!r.cfg.locales.some((l) => l.code === job.locale)) throw new Error(`Unknown locale "${job.locale}"`);
@@ -270,6 +308,7 @@ export async function renderPage(r: Renderer, job: RenderJob): Promise<RenderRes
     const sidecar: Sidecar = raw
       ? { ...raw, page: job.page, target: job.target, locale: job.locale, kit: true, requests: opened.requests, changedAfterReady: readyHash !== null && readyHash !== domHash(text) }
       : { ...emptySidecar(job.page, job.target, job.locale, "kit.unused: page did not use the kit; its text and fonts were not checked"), requests: opened.requests };
+    if (raw) sidecar.generated = [...sidecar.generated, ...await bounded(r, closedShadowRoots(tab))];
     if (sidecar.texts.length) {
       const c = buildContext(loadConfig(r.cfg.root), loadClaims(r.cfg.root), job.target, job.locale, job.page);
       await bounded(r, applyCoverage(tab, sidecar, c.fonts, r.cfg.root, new Map()));

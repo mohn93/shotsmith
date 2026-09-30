@@ -63,6 +63,29 @@ describe("kit evidence: generated text", () => {
     expect(s.generated[0].text).toMatch(/div#early/);
   });
 
+  it("records canvas text drawn by a classic script before the kit loads", async () => {
+    const s = await render("classic-canvas");
+    expect(free(s)).toEqual([expect.objectContaining({ kind: "canvas", chrome: false })]);
+    expect(free(s)[0].box[2]).toBeGreaterThan(0);
+  });
+
+  it("opens a closed shadow root made by a classic script before the kit loads", async () => {
+    const s = await render("classic-closed");
+    expect(s.texts).toContainEqual(expect.objectContaining({ text: "Free forever", claim: null }));
+    expect(s.generated).toEqual([]);
+  });
+
+  it("does not report the light children of an open host without a slot", async () => {
+    const s = await render("slotless");
+    expect(s.texts.map((x) => x.text)).toEqual([HEADLINE, "Free forever"]);
+    expect(s.generated).toEqual([]);
+  });
+
+  it("records alt text shown in place of an image", async () => {
+    const s = await render("alt");
+    expect(s.generated.filter((g) => g.kind === "alt").map((g) => g.text).sort()).toEqual(["Also shown", "Free forever"]);
+  });
+
   it("adds nothing for the device status bar and lift crops", async () => {
     for (const target of ["iphone-6.9", "android-phone"]) {
       const s = await render("device", target);
@@ -98,6 +121,37 @@ describe("kit evidence: visibility and clipping", () => {
     const s = await render("inline-clip");
     const cut = s.texts.find((x) => x.claim === "headline" && x.box[1] > 800);
     expect(cut).toMatchObject({ clipped: true, overflow: true });
+  });
+
+  it("marks text under a clip-path it cannot evaluate as clipped", async () => {
+    const s = await render("clip-calc");
+    const cut = s.texts.filter((x) => x.claim === "headline" && x.box[1] > 800);
+    expect(cut.length).toBeGreaterThan(0);
+    expect(cut.every((x) => x.clipped)).toBe(true);
+  });
+
+  it("judges SVG text by its fill and stroke, not color", async () => {
+    const s = await render("svg-fill");
+    expect(s.texts.map((x) => x.text)).toContain("Free forever");
+    expect(s.texts.map((x) => x.text)).not.toContain("Unpainted");
+  });
+
+  it("reports only visible claim elements in claimsShown", async () => {
+    const s = await render("hidden-claim");
+    expect(s.claimsShown).toEqual([expect.objectContaining({ claim: "headline", text: HEADLINE })]);
+  });
+
+  it("collects evidence on a 10,000-block page in under 3 s", async () => {
+    const tab = await r.browser.newPage({ viewport: { width: 1290, height: 2796 } });
+    try {
+      await tab.goto(`${r.server.url}/pages/evidence-big.html?t=iphone-6.9&l=en`);
+      await tab.waitForFunction(() => (window as any).__readyMs !== undefined || (window as any).__shotsmithError, null, { timeout: 60000 });
+      const [ms, error, texts] = await tab.evaluate(() => [(window as any).__readyMs, (window as any).__shotsmithError, (window as any).__shotsmithSidecar?.texts.length]);
+      expect(error).toBeUndefined();
+      expect(texts).toBe(10001);
+      console.log(`ready() on 10,000 blocks: ${Math.round(ms)} ms`);
+      expect(ms).toBeLessThan(3000);
+    } finally { await tab.close(); }
   });
 
   it("marks text inside an ellipsis container that overflows", async () => {

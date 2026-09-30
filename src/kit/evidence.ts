@@ -1,5 +1,4 @@
 import type { SidecarClaimShown, SidecarGenerated, SidecarText } from "../shared/sidecar.js";
-import { evidence } from "./runtime.js";
 
 // What ready() reads from the page: every visible text node (the document and open shadow roots), text shown some
 // other way (generated), and what each claim element visibly shows.
@@ -7,7 +6,6 @@ import { evidence } from "./runtime.js";
 type Box = [number, number, number, number];
 interface Rect { l: number; t: number; r: number; b: number }
 
-const XHTML = "http://www.w3.org/1999/xhtml";
 const EMPTY: Box = [0, 0, 0, 0];
 const boxOf = (r: DOMRect): Box => [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
 const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -49,6 +47,12 @@ const clipsBackgroundToText = (s: CSSStyleDeclaration) =>
   (s.getPropertyValue("background-clip") === "text" || s.getPropertyValue("-webkit-background-clip") === "text") &&
   (s.backgroundImage !== "none" || alpha(s.backgroundColor) > 0);
 
+// SVG text is painted with fill and stroke; color only matters through currentColor, which the computed values resolve.
+function svgInks(cs: CSSStyleDeclaration): boolean {
+  const paints = (paint: string, opacity: string) => paint !== "none" && Number(opacity) > 0 && (paint.startsWith("url(") || alpha(paint) > 0);
+  return paints(cs.fill, cs.fillOpacity) || (paints(cs.stroke, cs.strokeOpacity) && parseFloat(cs.strokeWidth) > 0);
+}
+
 // Whether text with style cs puts ink on the page: a visible fill, a stroke, a shadow, or a background clipped to the
 // text by it or an ancestor (gradient text sets color: transparent).
 function inks(cs: CSSStyleDeclaration, from: Element | null): boolean {
@@ -77,7 +81,8 @@ function textInfo(t: Text): TextInfo {
   range.selectNodeContents(t);
   const rect = range.getBoundingClientRect();
   const visible = !!el && !!collapse(t.nodeValue ?? "") && !el.closest("script,style,template,noscript") &&
-    rect.width > 0 && rect.height > 0 && visibleEl(el) && inks(getComputedStyle(el), parentOf(el));
+    rect.width > 0 && rect.height > 0 && visibleEl(el) &&
+    (el instanceof SVGElement ? svgInks(getComputedStyle(el)) : inks(getComputedStyle(el), parentOf(el)));
   const info = { rect, visible };
   textInfos.set(t, info);
   return info;
@@ -113,21 +118,28 @@ function length(s: string | undefined, ref: number, k: number): number | null {
   return m[2] === "%" ? (Number(m[1]) / 100) * ref : Number(m[1]) * k;
 }
 
-// The bounding rectangle of a clip-path shape; the border box when the shape cannot be read.
-function clipPathRect(v: string, a: Element, r: DOMRect): Rect {
+// Nothing fits inside it: text under a clip the kit cannot evaluate counts as clipped.
+const UNKNOWN_CLIP: Rect = { l: Infinity, t: Infinity, r: -Infinity, b: -Infinity };
+
+// The bounding rectangle of a clip-path shape (border-box reference); UNKNOWN_CLIP when the shape cannot be read
+// (path(), url(), calc(), keyword radii, another reference box).
+function clipPathRect(value: string, a: Element, r: DOMRect): Rect {
   const border = { l: r.left, t: r.top, r: r.right, b: r.bottom };
   const [sx, sy] = scaleOf(a, r);
+  const v = value.replace(/\s+border-box$/, "");
+  if (v === "border-box" || v === "margin-box") return border; // margin-box is larger; the border box is the stricter test
+  if (!/^(inset|polygon|circle|ellipse)\([^()]*\)$/.test(v)) return UNKNOWN_CLIP;
   let m = /^inset\(([^)]*)\)/.exec(v);
   if (m) {
     const [t0, r0 = t0, b0 = t0, l0 = r0] = m[1].split(/\s+round\s+/)[0].trim().split(/\s+/);
     const t = length(t0, r.height, sy), rt = length(r0, r.width, sx), b = length(b0, r.height, sy), l = length(l0, r.width, sx);
-    return t === null || rt === null || b === null || l === null ? border : { l: r.left + l, t: r.top + t, r: r.right - rt, b: r.bottom - b };
+    return t === null || rt === null || b === null || l === null ? UNKNOWN_CLIP : { l: r.left + l, t: r.top + t, r: r.right - rt, b: r.bottom - b };
   }
   m = /^polygon\((.*)\)/.exec(v);
   if (m) {
     const pts = m[1].replace(/^\s*(nonzero|evenodd)\s*,/, "").split(",").map((p) => p.trim().split(/\s+/));
     const xs = pts.map((p) => length(p[0], r.width, sx)), ys = pts.map((p) => length(p[1], r.height, sy));
-    if (xs.some((x) => x === null) || ys.some((y) => y === null)) return border;
+    if (xs.some((x) => x === null) || ys.some((y) => y === null)) return UNKNOWN_CLIP;
     return { l: r.left + Math.min(...(xs as number[])), t: r.top + Math.min(...(ys as number[])), r: r.left + Math.max(...(xs as number[])), b: r.top + Math.max(...(ys as number[])) };
   }
   m = /^(circle|ellipse)\(([^)]*) at ([^)]*)\)/.exec(v);
@@ -135,18 +147,20 @@ function clipPathRect(v: string, a: Element, r: DOMRect): Rect {
     const radii = m[2].trim().split(/\s+/), [px, py] = m[3].trim().split(/\s+/);
     const rx = /%/.test(radii[0]) ? null : length(radii[0], r.width, sx), ry = /%/.test(radii[1] ?? radii[0]) ? null : length(radii[1] ?? radii[0], r.height, sy);
     const cx = length(px, r.width, sx), cy = length(py, r.height, sy);
-    if (rx === null || ry === null || cx === null || cy === null) return border;
+    if (rx === null || ry === null || cx === null || cy === null) return UNKNOWN_CLIP;
     return { l: r.left + cx - rx, t: r.top + cy - ry, r: r.left + cx + rx, b: r.top + cy + ry };
   }
-  return border;
+  return UNKNOWN_CLIP;
 }
 
 // The legacy clip: rect(top, right, bottom, left) on an absolutely positioned element; auto keeps that edge.
 function legacyClip(v: string, a: Element, r: DOMRect): Rect {
-  const m = /^rect\((.*)\)$/.exec(v);
-  if (!m) return { l: r.left, t: r.top, r: r.right, b: r.bottom };
+  const m = /^rect\(([^()]*)\)$/.exec(v);
+  if (!m) return UNKNOWN_CLIP;
   const [sx, sy] = scaleOf(a, r);
-  const [t, rt, b, l] = m[1].split(/[\s,]+/).map((x, i) => (x === "auto" ? null : length(x, 0, i % 2 ? sx : sy)));
+  const parts = m[1].split(/[\s,]+/);
+  if (parts.length !== 4 || parts.some((x) => x !== "auto" && length(x, 0, 1) === null)) return UNKNOWN_CLIP;
+  const [t, rt, b, l] = parts.map((x, i) => (x === "auto" ? null : length(x, 0, i % 2 ? sx : sy)));
   return { l: l === null ? r.left : r.left + l, t: t === null ? r.top : r.top + t, r: rt === null ? r.right : r.left + rt, b: b === null ? r.bottom : r.top + b };
 }
 
@@ -277,9 +291,14 @@ function shownText(claimEl: Element): string {
   return collapse(parts.join(""));
 }
 
+// Visible claim elements only: a hidden one shows nothing and is not evidence of anything.
 function collectClaimsShown(): SidecarClaimShown[] {
-  return roots().flatMap((root) => Array.from(root.querySelectorAll<HTMLElement>("[data-claim]")))
-    .map((el) => ({ claim: el.dataset.claim ?? "", text: shownText(el), box: boxOf(el.getBoundingClientRect()) }));
+  const out: SidecarClaimShown[] = [];
+  for (const el of roots().flatMap((root) => Array.from(root.querySelectorAll<HTMLElement>("[data-claim]")))) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0 && visibleEl(el)) out.push({ claim: el.dataset.claim ?? "", text: shownText(el), box: boxOf(r) });
+  }
+  return out;
 }
 
 // --- Generated text -------------------------------------------------------------------------------------------------
@@ -361,7 +380,6 @@ function frameText(el: Element): string {
   return `${el.localName} src=${el.getAttribute("src") ?? ""}`;
 }
 
-const describe = (el: Element) => `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${Array.from(el.classList).join(".")}` : ""}`;
 
 // url("...") values from a computed style; computed values always quote and escape the URL.
 export function cssUrls(v: string | undefined): string[] {
@@ -395,26 +413,15 @@ async function svgTexts(url: string, depth = 0): Promise<string[] | null> {
   return out;
 }
 
-// Hosts attachShadow accepts: these HTML elements and custom elements.
-const SHADOW_HOSTS = new Set(["article", "aside", "blockquote", "body", "div", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "main", "nav", "p", "section", "span"]);
-
-// A closed shadow root cannot be read, only noticed: a child element outside the flat tree has no computed style, and
-// the caret at a point on the host resolves to the host's own position in its parent (it cannot enter the root).
-function hasClosedRoot(el: Element, openRoots: ShadowRoot[]): boolean {
-  if (el.shadowRoot || el.namespaceURI !== XHTML || !(SHADOW_HOSTS.has(el.localName) || el.localName.includes("-"))) return false;
-  if (Array.from(el.children).some((c) => getComputedStyle(c).display === "")) return true;
-  const r = el.getBoundingClientRect(), parent = el.parentNode;
-  if (r.width < 1 || r.height < 1 || !parent) return false;
-  const index = Array.prototype.indexOf.call(parent.childNodes, el);
-  const root = el.getRootNode() as Document | ShadowRoot;
-  const caret = document.caretPositionFromPoint as (x: number, y: number, o?: { shadowRoots: ShadowRoot[] }) => CaretPosition | null;
-  for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
-    const x = r.left + r.width * fx, y = r.top + r.height * fy;
-    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight || root.elementFromPoint(x, y) !== el) continue;
-    const c = caret.call(document, x, y, { shadowRoots: openRoots });
-    if (c && c.offsetNode === parent && c.offset === index) return true;
-  }
-  return false;
+// An image that is not drawn shows its alt text instead: no src, an empty src, or one that has not loaded. An
+// <input type=image> exposes no load state, so its image is decoded again (from cache) to find out.
+async function altShown(el: HTMLImageElement | HTMLInputElement): Promise<boolean> {
+  if (!el.alt.trim()) return false;
+  if (!el.getAttribute("src")) return true;
+  if (el instanceof HTMLImageElement) return !el.complete || el.naturalWidth === 0;
+  const probe = new Image();
+  probe.src = el.src;
+  return probe.decode().then(() => false, () => true);
 }
 
 async function collectGenerated(): Promise<SidecarGenerated[]> {
@@ -424,9 +431,9 @@ async function collectGenerated(): Promise<SidecarGenerated[]> {
     if (t) out.push({ kind, text: t, box: box ?? (el ? boxOf(el.getBoundingClientRect()) : EMPTY), chrome: !!el && !!composedClosest(el, "[data-chrome]") });
   };
   const rs = roots();
-  const openRoots = rs.filter((r): r is ShadowRoot => r instanceof ShadowRoot);
   const els = rs.flatMap((r) => Array.from(r.querySelectorAll("*")));
   const svgs: { url: string; el: Element | null; box?: Box }[] = [];
+  const alts: (HTMLImageElement | HTMLInputElement)[] = [];
 
   for (const el of els) {
     const cs = getComputedStyle(el);
@@ -444,6 +451,7 @@ async function collectGenerated(): Promise<SidecarGenerated[]> {
       if (text && inks(ms, el)) add("marker", text, el);
     }
     for (const p of [...IMAGE_PROPS, "content"]) for (const url of cssUrls(cs.getPropertyValue(p))) svgs.push({ url, el });
+    if (el instanceof HTMLImageElement || (el instanceof HTMLInputElement && el.type === "image")) alts.push(el);
     if (!sized) continue;
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) add("form", formText(el), el);
     else if (el instanceof HTMLIFrameElement || el instanceof HTMLObjectElement || el instanceof HTMLEmbedElement) add("frame", frameText(el), el);
@@ -453,11 +461,13 @@ async function collectGenerated(): Promise<SidecarGenerated[]> {
     if (el instanceof HTMLInputElement && el.type === "image" && el.src) svgs.push({ url: el.src, el });
   }
 
-  for (const [canvas, texts] of evidence.canvasTexts) {
+  for (const el of alts) if (await altShown(el)) add("alt", el.alt, el);
+  const patches = window.__shotsmithPatches!;
+  for (const [canvas, texts] of patches.canvasTexts) {
     const inPage = canvas instanceof HTMLCanvasElement && canvas.isConnected;
     for (const text of texts) add("canvas", text, inPage ? canvas : null, inPage ? undefined : EMPTY);
   }
-  for (const [canvas, urls] of evidence.canvasImages) {
+  for (const [canvas, urls] of patches.canvasImages) {
     const inPage = canvas instanceof HTMLCanvasElement && canvas.isConnected;
     for (const url of urls) svgs.push({ url, el: inPage ? canvas : null, box: inPage ? undefined : EMPTY });
   }
@@ -469,7 +479,6 @@ async function collectGenerated(): Promise<SidecarGenerated[]> {
     for (const text of texts ?? [`unreadable SVG image ${s.url.slice(0, 80)}`]) add("svgImage", text, s.el, s.box);
   }
 
-  for (const el of els) if (hasClosedRoot(el, openRoots)) add("shadowClosed", `${describe(el)} has a closed shadow root`, el);
   // One entry per distinct thing shown (mask-image and -webkit-mask-image name the same image, for one).
   const seen = new Set<string>();
   return out.filter((g) => { const k = JSON.stringify(g); return !seen.has(k) && !!seen.add(k); });

@@ -9,7 +9,8 @@ export interface SidecarDevice { platform: string; capture: string; statusBar: "
 // Text the page shows outside its DOM text nodes. Pseudo and marker boxes are their element's box; a canvas that is not
 // in the page (an OffscreenCanvas, a detached canvas) has box [0, 0, 0, 0] because where its pixels end up is unknown.
 export interface SidecarGenerated {
-  kind: "pseudo" | "marker" | "canvas" | "frame" | "form" | "svgImage" | "shadowClosed";
+  // alt: the alt text of an <img> or <input type=image> shown because the image is not drawn.
+  kind: "pseudo" | "marker" | "canvas" | "frame" | "form" | "svgImage" | "shadowClosed" | "alt";
   // The text shown, or the element description for frames, forms and closed shadow roots.
   text: string;
   box: [number, number, number, number];
