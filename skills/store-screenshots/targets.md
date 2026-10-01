@@ -37,7 +37,7 @@ A custom target is `{ "name", "w", "h", "platform" }` in `targets`; Apple target
 
 ## Uploading (only when the user asks)
 
-`shotsmith upload apple` and `shotsmith upload play` send `export/` to the stores. Set the app's ids in `shotsmith.config.json` first: `"apple": { "bundleId" }` and `"play": { "packageName" }`; ask the user for them. Without a flag the commands only plan: they print what would be kept, deleted (with file names where the store gives them) and uploaded and the final order per language and slot, write `export/upload-plan-apple.json` or `export/upload-plan-play.json`, and change nothing. Exit 1 means the plan has problems (exports that fail `check`, a language the store listing lacks, a target with no slot); fix them and plan again. The same problems found during `--apply` exit 2, and nothing is changed.
+`shotsmith upload apple` and `shotsmith upload play` send `export/` to the stores. Set the app's ids in `shotsmith.config.json` first: `"apple": { "bundleId" }` and `"play": { "packageName" }`; ask the user for them. Without a flag the commands only plan: they print what would be kept, deleted (with file names where the store gives them) and uploaded and the final order per language and slot, write `export/upload-plan-apple.json` or `export/upload-plan-play.json`, and change nothing. Exit 1 means the plan has problems (exports that fail `check`, a language the store listing lacks, a target with no slot); fix them and plan again. Under `--apply`, export problems exit 1 and keep the saved plan; problems found in the store exit 2. Either way nothing is changed.
 
 - Credentials come from the environment or `~/.config/shotsmith/credentials.json`, never from the workspace. A key file inside any git working tree is refused.
 

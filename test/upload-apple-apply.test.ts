@@ -87,7 +87,7 @@ describe("applyApple", () => {
     expect(fake.calls.filter((c) => c.startsWith("PUT "))).toEqual([]);
   });
 
-  it("sends parts to apple.com and its subdomains", async () => {
+  it("sends parts to the apple.com apex", async () => {
     const { cfg, sets, fake, plan } = await planned();
     fake.uploadHost = "https://apple.com";
     expect((await applyApple(cfg, sets, {}, plan, deps(fake))).ok).toBe(true);
