@@ -1,0 +1,170 @@
+{
+  "opener.eyebrow": {
+    "source": "store-copy: Elsewhere - Trip Planner",
+    "text": {
+      "en": "Elsewhere",
+      "de": "Elsewhere"
+    }
+  },
+  "opener.postmark": {
+    "source": "capture: elsewhere-trips, brand line",
+    "text": {
+      "en": "ELSEWHERE",
+      "de": "ELSEWHERE"
+    }
+  },
+  "opener.headline": {
+    "source": "store-copy: Your plans, all in one place",
+    "text": {
+      "en": "Your plans,\nall in one place.",
+      "de": "Deine Pläne,\nalle an einem Ort."
+    }
+  },
+  "opener.row1": {
+    "source": "store-copy: Keep your flights and stays together in one itinerary for every trip.",
+    "text": {
+      "en": "Flights and stays, together",
+      "de": "Flüge und Unterkünfte, zusammen"
+    }
+  },
+  "opener.row1Sub": {
+    "source": "store-copy: Keep your flights and stays together in one itinerary for every trip.",
+    "text": {
+      "en": "One itinerary for every trip",
+      "de": "Ein Reiseplan für jede Reise"
+    }
+  },
+  "opener.row2": {
+    "source": "store-copy: Plan each day hour by hour on a simple timeline, and flip between days of your trip.",
+    "text": {
+      "en": "Every day, hour by hour",
+      "de": "Jeder Tag, Stunde für Stunde"
+    }
+  },
+  "opener.row2Sub": {
+    "source": "store-copy: Plan each day hour by hour on a simple timeline, and flip between days of your trip.",
+    "text": {
+      "en": "On a simple timeline",
+      "de": "Auf einer einfachen Zeitleiste"
+    }
+  },
+  "trip.eyebrow": {
+    "source": "store-copy: See your upcoming trip, its dates and length the moment you open the app.",
+    "text": {
+      "en": "Upcoming trip",
+      "de": "Nächste Reise"
+    }
+  },
+  "trip.headline": {
+    "source": "store-copy: See your upcoming trip, its dates and length the moment you open the app.",
+    "text": {
+      "en": "Your next trip,\nat a glance.",
+      "de": "Die nächste Reise,\nauf einen Blick."
+    }
+  },
+  "trip.subline": {
+    "source": "store-copy: See your upcoming trip, its dates and length the moment you open the app.",
+    "text": {
+      "en": "Dates and length, the moment\nyou open the app",
+      "de": "Daten und Dauer, sobald\ndu die App öffnest"
+    }
+  },
+  "day.eyebrow": {
+    "source": "store-copy: Plan each day hour by hour on a simple timeline, and flip between days of your trip.",
+    "text": {
+      "en": "Day plans",
+      "de": "Tagespläne"
+    }
+  },
+  "day.headline": {
+    "source": "store-copy: Plan each day hour by hour on a simple timeline, and flip between days of your trip.",
+    "text": {
+      "en": "Plan each day,\nhour by hour.",
+      "de": "Plane jeden Tag,\nStunde für Stunde."
+    }
+  },
+  "day.subline": {
+    "source": "store-copy: Plan each day hour by hour on a simple timeline, and flip between days of your trip.",
+    "text": {
+      "en": "Flip between the days of your trip",
+      "de": "Blättere zwischen den Tagen deiner Reise"
+    }
+  },
+  "explore.eyebrow": {
+    "source": "capture: elsewhere-map, title",
+    "text": {
+      "en": "Explore nearby",
+      "de": "Entdecke die Nähe"
+    }
+  },
+  "explore.headline": {
+    "source": "store-copy: Explore good places close to you on a map, and save the spots you want to see.",
+    "text": {
+      "en": "Good places,\nclose to you.",
+      "de": "Gute Orte,\nin deiner Nähe."
+    }
+  },
+  "explore.subline": {
+    "source": "store-copy: Explore good places close to you on a map, and save the spots you want to see.",
+    "text": {
+      "en": "Save the spots you want to see",
+      "de": "Speichere die Plätze, die du sehen willst"
+    }
+  },
+  "finale.eyebrow": {
+    "source": "store-copy: Elsewhere - Trip Planner",
+    "text": {
+      "en": "Elsewhere",
+      "de": "Elsewhere"
+    }
+  },
+  "finale.headline": {
+    "source": "store-copy: Your plans, all in one place",
+    "text": {
+      "en": "All your plans.\nOne place.",
+      "de": "Alle deine Pläne.\nEin Ort."
+    }
+  },
+  "finale.flights": {
+    "source": "store-copy: Keep your flights and stays together in one itinerary for every trip.",
+    "text": {
+      "en": "Flights\nand stays",
+      "de": "Flüge und\nUnterkünfte"
+    }
+  },
+  "finale.itinerary": {
+    "source": "store-copy: Keep your flights and stays together in one itinerary for every trip.",
+    "text": {
+      "en": "One itinerary\nper trip",
+      "de": "Ein Reiseplan\npro Reise"
+    }
+  },
+  "finale.days": {
+    "source": "store-copy: Plan each day hour by hour on a simple timeline, and flip between days of your trip.",
+    "text": {
+      "en": "Every day,\nhour by hour",
+      "de": "Tagespläne\nnach Stunden"
+    }
+  },
+  "finale.dates": {
+    "source": "store-copy: See your upcoming trip, its dates and length the moment you open the app.",
+    "text": {
+      "en": "Trip dates\nat a glance",
+      "de": "Reisedaten\nauf einen Blick"
+    }
+  },
+  "finale.places": {
+    "source": "store-copy: Explore good places close to you on a map, and save the spots you want to see.",
+    "text": {
+      "en": "Good places\nnearby",
+      "de": "Gute Orte\nin der Nähe"
+    }
+  },
+  "finale.saved": {
+    "source": "store-copy: Explore good places close to you on a map, and save the spots you want to see.",
+    "text": {
+      "en": "Spots you\nwant to see",
+      "de": "Plätze, die du\nsehen willst"
+    }
+  }
+}

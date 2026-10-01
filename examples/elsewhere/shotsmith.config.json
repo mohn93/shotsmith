@@ -1,0 +1,19 @@
+{
+  "app": "Elsewhere",
+  "pages": ["01-opener", "02-trip", "03-day", "04-explore", "05-finale"],
+  "targets": ["iphone-6.9", "android-phone"],
+  "locales": [
+    { "code": "en", "apple": "en-US", "play": "en-US" },
+    { "code": "de", "apple": "de-DE", "play": "de-DE" }
+  ],
+  "fonts": {
+    "display": { "apple": "fonts/Fraunces.ttf", "play": "fonts/Fraunces.ttf" },
+    "accent": { "apple": "fonts/Fraunces-Italic.ttf", "play": "fonts/Fraunces-Italic.ttf" },
+    "text": {
+      "apple": { "400": "fonts/Inter-Regular.ttf", "700": "fonts/Inter-Bold.ttf" },
+      "play": { "400": "fonts/Inter-Regular.ttf", "700": "fonts/Inter-Bold.ttf" }
+    }
+  },
+  "captures": { "iphone": { "statusBar": "included" }, "android-phone": { "statusBar": "included" } },
+  "output": "export"
+}

@@ -1,0 +1,82 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { stage, t, ready } from "shotsmith/kit";
+import { createRenderer } from "shotsmith/kit/three";
+import { C, box, geo, landscape, title, wavePaths, stripCamera, warmEnvironment, svgTexture, glowSprite, icon } from "./system.js";
+
+const SLICE = 0;
+const s = await stage();
+const G = geo(s), W = s.W, H = s.H;
+landscape(s, SLICE);
+
+// ---------- headline ----------
+await title(s, { eyebrow: "opener.eyebrow", id: "opener.headline" });
+
+// ---------- postmark (SVG): the wordmark on its ring; the cancellation waves run on across the seam ----------
+const PM = G.PM, rr = PM.r - 21, half = Math.PI * rr;
+// two half rings, each carrying the wordmark clockwise, with a dot in each gap
+const arc = (id, a0) => {
+  const p = (a) => `${(PM.x + rr * Math.cos(a)).toFixed(2)} ${(PM.y + rr * Math.sin(a)).toFixed(2)}`;
+  return `<path id="${id}" d="M ${p(a0)} A ${rr} ${rr} 0 0 1 ${p(a0 + Math.PI)}"/>`;
+};
+const ring = (id) => `<text data-claim="opener.postmark" style="font:700 20px var(--font-text)" fill="${C.gold}" stroke="none">` +
+  `<textPath href="#${id}" startOffset="${(half * 0.08).toFixed(1)}" textLength="${(half * 0.84).toFixed(1)}" lengthAdjust="spacing">${t("opener.postmark")}</textPath></text>`;
+const dot = (a) => `<circle cx="${(PM.x + rr * Math.cos(a)).toFixed(2)}" cy="${(PM.y + rr * Math.sin(a)).toFixed(2)}" r="3.2" fill="${C.gold}" fill-opacity=".55" stroke="none"/>`;
+// the rings and waves are drawn at the strip's .55 (screen 2 continues the waves at that opacity); the wordmark is drawn at full strength so it reads
+box(s.root, `left:0;top:0;width:${W}px;height:${H}px;z-index:30`, `
+<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="${C.gold}" stroke-opacity=".55">
+  <defs>${arc("ringTop", Math.PI)}${arc("ringBottom", 0)}</defs>
+  <circle cx="${PM.x}" cy="${PM.y}" r="${PM.r}" stroke-width="3.5"/>
+  <circle cx="${PM.x}" cy="${PM.y}" r="${PM.r - 42}" stroke-width="2"/>
+  ${ring("ringTop")}${ring("ringBottom")}${dot(0)}${dot(Math.PI)}
+  <g stroke-width="3" stroke-linecap="round">
+    <path d="M ${PM.x - 30} ${PM.y + 6} a 30 30 0 0 1 60 0"/>
+    <path d="M ${PM.x - 38} ${PM.y + 16} h 76"/><path d="M ${PM.x - 30} ${PM.y + 26} h 60"/><path d="M ${PM.x - 18} ${PM.y + 36} h 36"/>
+  </g>
+  ${wavePaths(G, PM.x + PM.r + 14, W + 20)}
+</svg>`);
+
+// ---------- gulls (SVG), small and dark against the glow, placed from the horizon ----------
+const hz = G.HORIZON;
+box(s.root, `left:0;top:0;width:${W}px;height:${H}px;z-index:25;opacity:.8`, `
+<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#4a2b4a" stroke-linecap="round" stroke-linejoin="round">
+  ${[[742, hz - 508, 1], [796, hz - 540, .8], [838, hz - 488, .62], [702, hz - 460, .55]].map(([x, y, k]) =>
+    `<path d="M ${x - 22 * k} ${y - 4 * k} q ${11 * k} ${-12 * k} ${22 * k} ${4 * k} q ${11 * k} ${-16 * k} ${22 * k} ${-4 * k}" stroke-width="${3.6 * k}"/>`).join("")}
+</svg>`);
+
+// ---------- proof rows: 3D enamel tiles (three.js) and type ----------
+const LEFT = 96, TILE = 150, TX = LEFT + TILE / 2 + 4;
+const ROWS = [
+  { y: Math.round(H * s.pick({ tall: 0.805, p916: 0.79 })), icon: "plane", id: "opener.row1", sub: "opener.row1Sub", body: "#F4B26C", glyph: "#3A2340", glow: "#f29a5b" },
+  { y: Math.round(H * s.pick({ tall: 0.895, p916: 0.885 })), icon: "clock", id: "opener.row2", sub: "opener.row2Sub", body: "#6E4B92", glyph: "#FFE3BE", glow: "#e0707a" },
+];
+const r = createRenderer({ supersample: 2, z: 20 });
+r.setClearColor(0x000000, 0);
+r.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.environment = warmEnvironment(r);
+for (const [i, R] of ROWS.entries()) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new RoundedBoxGeometry(TILE, TILE, 44, 8, 34),
+    new THREE.MeshPhysicalMaterial({ color: R.body, metalness: 0.05, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.5, sheen: 0.4, sheenColor: new THREE.Color("#ffd7a0") })));
+  const tex = await svgTexture(icon(R.icon, { size: 512, color: R.glyph, sw: 5.4 }), 512);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(TILE * 0.56, TILE * 0.56),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+  face.position.z = 23; g.add(face);
+  g.position.set(SLICE * W + TX, -R.y, 0);
+  g.rotation.set(THREE.MathUtils.degToRad(14), THREE.MathUtils.degToRad(-26 + i * 6), THREE.MathUtils.degToRad(-3));
+  scene.add(g);
+  const gl = glowSprite(R.glow, 360, 0.28); gl.position.set(SLICE * W + TX + 10, -R.y - 40, -80); scene.add(gl);
+
+  const row = box(s.root, `left:${LEFT + TILE + 62}px;top:${R.y - 66}px;width:${W - LEFT - TILE - 62 - 60}px;z-index:40`);
+  const tt = t.el("div", R.id, row);
+  tt.style.cssText = `font:700 ${s.pick({ tall: 54, p916: 50 })}px/1.1 var(--font-text);letter-spacing:-0.015em;color:${C.cream}`;
+  const ss = t.el("div", R.sub, row);
+  ss.style.cssText = `font:400 ${s.pick({ tall: 44, p916: 40 })}px/1.25 var(--font-text);color:${C.sub};margin-top:8px`;
+}
+r.render(scene, stripCamera(s, SLICE));
+
+await ready();
+</script></body></html>
