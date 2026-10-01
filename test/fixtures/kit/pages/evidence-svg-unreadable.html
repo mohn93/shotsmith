@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, t, ready } from "shotsmith/kit";
+const s = await stage();
+const h = t.el("div", "headline", s.root);
+Object.assign(h.style, { position: "absolute", left: "80px", top: "300px", width: "1100px", font: "700 80px var(--font-display)", color: "#fff" });
+// A blob SVG that is drawn, then revoked: the kit can no longer fetch it to read its text.
+const svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"600\" height=\"100\"><text x=\"10\" y=\"60\" font-size=\"40\" fill=\"white\">Free forever</text></svg>";
+const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+const img = document.createElement("img");
+img.src = url;
+img.style.cssText = "position:absolute;left:80px;top:900px;width:600px;height:100px";
+s.root.appendChild(img);
+await img.decode();
+URL.revokeObjectURL(url);
+await ready();
+</script></body></html>

@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, headline, ready } from "shotsmith/kit";
+const s = await stage();
+const mk = (top, width) => { const d = document.createElement("div"); Object.assign(d.style, { position: "absolute", left: "80px", top: top + "px", width: width + "px", font: "700 10px var(--font-display)" }); s.root.appendChild(d); return d; };
+const results = {
+  fits: await headline(mk(200, 1100), "headline", { maxSize: 80 }),
+  shrinks: await headline(mk(700, 700), "headline", { maxSize: 140, maxLines: 2 }),
+  fails: await headline(mk(1300, 300), "long", { maxSize: 90, minSize: 80, maxLines: 1 }),
+};
+document.body.dataset.results = JSON.stringify(results);
+await ready();
+</script></body></html>

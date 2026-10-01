@@ -1,0 +1,11 @@
+{
+  "app": "Kit",
+  "pages": ["texts"],
+  "targets": ["iphone-6.9", "android-phone", "ipad-13", "android-tablet"],
+  "locales": [{ "code": "en" }, { "code": "de" }, { "code": "ar", "dir": "rtl" }],
+  "fonts": {
+    "display": { "apple": "fonts/Inter-Bold.ttf", "play": "fonts/Inter-Bold.ttf" },
+    "text": { "apple": "fonts/Inter-Regular.ttf", "play": "fonts/Inter-Regular.ttf" }
+  },
+  "captures": { "iphone": { "statusBar": "included" } }
+}

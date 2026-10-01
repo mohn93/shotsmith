@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"></head>
+<body>
+<script type="module">
+import { stage, headline, device, ready } from "shotsmith/kit";
+
+const s = await stage();
+s.root.style.background = "linear-gradient(180deg, #16213a 0%, #0a0f1c 100%)";
+
+const h = document.createElement("div");
+Object.assign(h.style, { position: "absolute", left: "90px", top: s.pick({ tall: 220, p916: 150, t43: 120, t916: 170 }) + "px", width: "1080px", color: "#fff", fontFamily: "var(--font-display)", fontWeight: "700" });
+s.root.appendChild(h);
+const title = await headline(h, "opener.headline", { maxSize: 110, maxLines: 2 });
+
+await device({ capture: "home", x: 230, y: title.bottom + 90, width: s.pick({ tall: 800, p916: 620, t43: 520, t916: 640 }) });
+await ready();
+</script>
+</body></html>

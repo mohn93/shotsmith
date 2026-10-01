@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, lift, ready } from "shotsmith/kit";
+await stage();
+const d = await device({ capture: "home", x: 180, y: 260, width: 900, shadow: false });
+// Each misuse must throw with the expected message; otherwise the page reports an error and the render fails.
+const expectThrow = (label, fn, match) => {
+  try { fn(); } catch (e) { if (match.test(e.message)) return; window.__shotsmithError = `${label}: wrong error: ${e.message}`; return; }
+  window.__shotsmithError = `${label}: did not throw`;
+};
+expectThrow("cover with at", () => lift(d, { region: [90, 600, 1080, 900], mode: "cover", at: [1, 1] }), /use mode 'recess'/);
+expectThrow("default mode with at", () => lift(d, { region: [90, 600, 1080, 900], at: [1, 1] }), /use mode 'recess'/);
+expectThrow("cover with scale < 1", () => lift(d, { region: [90, 600, 1080, 900], mode: "cover", scale: 0.9 }), /scale >= 1/);
+if (!window.__shotsmithError) await ready();
+</script></body></html>

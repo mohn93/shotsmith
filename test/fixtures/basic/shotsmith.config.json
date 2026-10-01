@@ -1,0 +1,1 @@
+{ "app": "Basic", "pages": ["plain"], "targets": ["iphone-6.9", "android-phone"], "locales": [{ "code": "en" }] }

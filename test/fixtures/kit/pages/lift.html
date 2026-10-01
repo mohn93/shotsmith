@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, lift, ready } from "shotsmith/kit";
+const s = await stage();
+s.root.style.background = "#1b2a3a";
+const d = await device({ capture: "home", x: 180, y: 260, width: 900, shadow: false });
+lift(d, { region: [90, 600, 1080, 900], mode: "recess", at: [630, 2500], scale: 1 });
+try { lift(d, { region: [90, 600, 1080, 900], at: [1, 1] }); } catch (e) { document.body.dataset.coverError = e.message; }
+await ready();
+</script></body></html>

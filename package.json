@@ -1,0 +1,39 @@
+{
+  "name": "shotsmith",
+  "version": "0.1.0",
+  "description": "App Store and Google Play screenshots, written as code by an AI agent and checked against store rules",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "shotsmith": "./dist/cli.js" },
+  "exports": {
+    "./kit": { "types": "./dist/kit/index.d.ts", "default": "./dist/kit/index.js" },
+    "./kit/three": { "types": "./dist/kit/three.d.ts", "default": "./dist/kit/three.js" },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "templates", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsup",
+    "lint": "tsc --noEmit",
+    "test": "npm run build && vitest run",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "fontkit": "^2.0.4",
+    "playwright": "^1.63.0",
+    "sharp": "^0.35.4",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": { "three": ">=0.160.0" },
+  "peerDependenciesMeta": { "three": { "optional": true } },
+  "devDependencies": {
+    "@types/fontkit": "^2.0.9",
+    "@types/node": "^25.3.0",
+    "@types/three": "^0.186.0",
+    "three": "0.186.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

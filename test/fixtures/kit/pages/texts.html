@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, t, ready } from "shotsmith/kit";
+const s = await stage();
+const h = t.el("div", "headline", s.root);
+Object.assign(h.style, { position: "absolute", left: "80px", top: "400px", width: "1100px", font: "700 90px var(--font-display)", color: "#fff" });
+const box = t.el("div", "long", s.root);
+Object.assign(box.style, { position: "absolute", left: "80px", top: "900px", width: "300px", height: "60px", whiteSpace: "nowrap", overflow: "hidden", font: "400 40px var(--font-text)" });
+const raw = document.createElement("div");
+raw.textContent = "Untraced words";
+Object.assign(raw.style, { position: "absolute", left: "80px", top: "1200px", font: "400 40px var(--font-text)" });
+s.root.appendChild(raw);
+const chrome = document.createElement("div");
+chrome.dataset.chrome = "";
+chrome.textContent = "9:41";
+Object.assign(chrome.style, { position: "absolute", left: "80px", top: "1400px" });
+s.root.appendChild(chrome);
+const edge = t.el("div", "headline", s.root);
+Object.assign(edge.style, { position: "absolute", left: "-200px", top: "20px", font: "400 40px var(--font-text)" });
+await ready();
+</script></body></html>

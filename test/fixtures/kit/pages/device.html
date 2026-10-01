@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, ready } from "shotsmith/kit";
+const s = await stage();
+s.root.style.background = "#1b2a3a";
+const q = new URLSearchParams(location.search);
+await device({ capture: q.get("c") ?? "home", x: 180, y: s.pick({ tall: 260, p916: 200, t43: 160, t916: 220 }), width: s.pick({ tall: 900, p916: 760, t43: 700, t916: 820 }), repaint: q.has("repaint") });
+await ready();
+</script></body></html>
