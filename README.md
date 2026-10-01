@@ -2,6 +2,21 @@
 
 App Store and Google Play screenshots, written as code by an AI agent and checked against store rules. Pre-release.
 
+## Install
+
+Shotsmith is not on npm yet. Until it is, build it from source and link it:
+
+```sh
+git clone https://github.com/mohn93/shotsmith && cd shotsmith
+npm ci && npm run build && npm link
+npx playwright install chromium
+```
+
+The agent skill (`skills/store-screenshots`) drives the whole flow: taste, claims, brief, pages, review, build.
+
+- Claude Code: `/plugin marketplace add mohn93/shotsmith`, then `/plugin install shotsmith@shotsmith`.
+- Other agents: `shotsmith skill install` copies it to `~/.claude/skills/store-screenshots`; `--dir <folder>` installs it elsewhere, and `shotsmith skill path` prints where the bundled copy is.
+
 ## Commands
 
 | Command | Does |
