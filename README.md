@@ -54,7 +54,7 @@ Pages are plain HTML that import `shotsmith/kit` (and optionally `shotsmith/kit/
 
 ## Uploading
 
-`shotsmith upload apple` and `shotsmith upload play` send `export/` to the stores after `build` passes. Without a flag they only plan: they print what would be kept, deleted and uploaded and the final order, write `export/upload-plan-<store>.json`, and change nothing.
+`shotsmith upload apple` and `shotsmith upload play` send `export/` to the stores after `build` passes. Without a flag they only plan: they print what would be kept, deleted and uploaded and the final order, write `export/upload-plan-<store>.json`, and change nothing. Set `"apple": { "bundleId" }` and `"play": { "packageName" }` in `shotsmith.config.json` first.
 
 | Command | Does |
 | --- | --- |
@@ -64,7 +64,7 @@ Pages are plain HTML that import `shotsmith/kit` (and optionally `shotsmith/kit/
 | `shotsmith upload play --apply` | Stage them in a validated draft edit, print its id and write `export/upload-report-play.json`; nothing is live |
 | `shotsmith upload play --commit <editId>` | Publish the staged edit |
 
-`--apply` refuses when the exports or the store changed since the saved plan; plan again. Credentials come from the environment or `~/.config/shotsmith/credentials.json`, never from the workspace, and a key file inside a git working tree is refused:
+`--apply` refuses when the exports or the store changed since the saved plan; plan again, and repeat the same `-l` and `--app-version` on `--apply`. A failed `--apply` writes its report and exits 2. On Google Play the draft edit is discarded, so the listing is unchanged; on App Store Connect the version may be left incomplete, so plan and apply again before submitting. Credentials come from the environment or `~/.config/shotsmith/credentials.json`, never from the workspace, and a key file inside a git working tree is refused:
 
 | Store | Environment | `credentials.json` |
 | --- | --- | --- |
@@ -77,6 +77,6 @@ Pages are plain HTML that import `shotsmith/kit` (and optionally `shotsmith/kit/
 | --- | --- |
 | 0 | Success, no error findings (warnings do not fail) |
 | 1 | Error findings (for `strip`, a seam that steps; for `upload`, problems in the plan) |
-| 2 | Usage or runtime failure: bad arguments, missing config, a crash |
+| 2 | Usage or runtime failure: bad arguments, missing config, a crash, a failed or refused upload |
 
-With `--json` every command prints exactly one JSON object to stdout and nothing else. It always has a boolean `ok`: `ok` is `true` for exit code 0 and `false` otherwise. Commands that check (`check`, `claims`, `build`) add `errors` and `warnings` arrays of `{ rule, severity, message, locale?, target?, page? }`. A runtime failure prints `{ "ok": false, "error": { "message": "..." } }` and exits 2. `upload` adds `plan` and `planFile`, `report` and `reportFile`, or `committed`.
+With `--json` every command prints exactly one JSON object to stdout and nothing else. It always has a boolean `ok`: `ok` is `true` for exit code 0 and `false` otherwise. Commands that check (`check`, `claims`, `build`) add `errors` and `warnings` arrays of `{ rule, severity, message, locale?, target?, page? }`. A runtime failure prints `{ "ok": false, "error": { "message": "..." } }` and exits 2. `upload` adds `plan` and `planFile`, `report` and `reportFile`, or `committed`; a failed upload apply carries `error` plus `report` and `reportFile`.

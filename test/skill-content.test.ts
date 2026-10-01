@@ -83,5 +83,9 @@ describe("skill content", () => {
       expect(targets, s).toContain(s);
     }
     expect(targets).not.toMatch(/upload apple[^\n]*--version/);
+    expect(skill).toMatch(/not confirmation of the plan/);
+    expect(skill).toMatch(/never ask for keys in chat/);
+    expect(targets).toContain('"apple": { "bundleId" }');
+    expect(targets).toContain('"play": { "packageName" }');
   });
 });
