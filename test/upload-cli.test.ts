@@ -23,6 +23,12 @@ const run = (args: string[], env: NodeJS.ProcessEnv = {}) => {
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
 const json = (r: { out: string }) => JSON.parse(r.out);
+// Each --help text is fetched once per run: a process start costs more than the assertions.
+const helps = new Map<string, string>();
+const help = (store: "apple" | "play"): string => {
+  if (!helps.has(store)) helps.set(store, run(["upload", store, "--help"]).out);
+  return helps.get(store)!;
+};
 // Every error case exits 2 and says ok: false with its message on stdout.
 const fails = (r: { code: number | null; out: string }, message: RegExp) => {
   expect(r.code).toBe(2);
@@ -31,10 +37,9 @@ const fails = (r: { code: number | null; out: string }, message: RegExp) => {
 
 describe("upload command", () => {
   it("documents its flags", () => {
-    const a = run(["upload", "apple", "--help"]);
-    for (const f of ["--app-version", "--apply", "--locale"]) expect(a.out).toContain(f);
-    expect(run(["upload", "play", "--help"]).out).toContain("--commit <editId>");
-    expect(run(["upload", "play", "--help"]).out).toContain("--changes-not-sent-for-review");
+    for (const f of ["--app-version", "--apply", "--locale"]) expect(help("apple")).toContain(f);
+    expect(help("play")).toContain("--commit <editId>");
+    expect(help("play")).toContain("--changes-not-sent-for-review");
   });
 
   it("reports export problems with exit 1 before looking for credentials", async () => {
@@ -108,11 +113,13 @@ describe("upload command", () => {
     }
   });
 
-  it("has every flag the skill names", () => {
-    const text = fs.readFileSync(path.join(ROOT, "skills/store-screenshots/targets.md"), "utf8");
-    const help = run(["upload", "apple", "--help"]).out + run(["upload", "play", "--help"]).out;
-    const flags = [...new Set([...text.matchAll(/`[^`]*upload (?:apple|play)[^`]*`/g)].flatMap((m) => m[0].match(/--[a-z-]+/g) ?? []))];
-    expect(flags.length).toBeGreaterThan(2);
-    for (const f of flags) expect(help, f).toContain(f);
+  it("has every flag the docs name in an upload command", () => {
+    const text = ["skills/store-screenshots/targets.md", "skills/store-screenshots/SKILL.md", "README.md"].map((f) => fs.readFileSync(path.join(ROOT, f), "utf8")).join("\n");
+    const all = help("apple") + help("play");
+    const spans = [...text.matchAll(/`[^`]*upload (?:apple|play)[^`]*`/g)].map((m) => m[0]);
+    // Long flags, and short ones such as -l (not the dashes inside a word or a long flag).
+    const flags = [...new Set(spans.flatMap((s) => s.match(/(?<![\w-])--?[a-zA-Z][\w-]*/g) ?? []))];
+    expect(flags).toEqual(expect.arrayContaining(["--apply", "--commit", "--app-version", "-l"]));
+    for (const f of flags) expect(all, f).toMatch(new RegExp(`(?<![\\w-])${f}(?![\\w-])`));
   });
 });

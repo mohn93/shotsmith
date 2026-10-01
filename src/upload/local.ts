@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import { formatFinding } from "../checks/findings.js";
 import { checkExports, exportPath } from "../checks/store.js";
 import type { LocaleConfig, ResolvedConfig } from "../config/schema.js";

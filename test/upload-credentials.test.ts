@@ -33,6 +33,21 @@ describe("credentials", () => {
     expect(playCredentials({ SHOTSMITH_PLAY_KEY_PATH: "/keys/p.json" }, home)).toEqual({ keyPath: "/keys/p.json" });
   });
 
+  it("lets the environment's key path win over the one in credentials.json", () => {
+    const home = homeWith({ apple: { issuerId: "i", keyId: "k", keyPath: "~/file.p8" }, play: { keyPath: "~/file.json" } });
+    expect(appleCredentials({ SHOTSMITH_ASC_KEY_PATH: "/env/a.p8" }, home).keyPath).toBe("/env/a.p8");
+    expect(playCredentials({ SHOTSMITH_PLAY_KEY_PATH: "/env/p.json" }, home).keyPath).toBe("/env/p.json");
+    // An empty variable counts as unset.
+    expect(appleCredentials({ SHOTSMITH_ASC_KEY_PATH: "" }, home).keyPath).toBe(path.join(home, "file.p8"));
+    expect(playCredentials({ SHOTSMITH_PLAY_KEY_PATH: "" }, home).keyPath).toBe(path.join(home, "file.json"));
+  });
+
+  it("reads a bare ~ in credentials.json as the home folder", () => {
+    const home = homeWith({ apple: { issuerId: "i", keyId: "k", keyPath: "~" }, play: { keyPath: "~" } });
+    expect(appleCredentials({}, home).keyPath).toBe(home);
+    expect(playCredentials({}, home).keyPath).toBe(home);
+  });
+
   it("names every way to provide missing credentials", () => {
     expect(() => appleCredentials({}, tmp("home"))).toThrow(/SHOTSMITH_ASC_ISSUER_ID, SHOTSMITH_ASC_KEY_ID and SHOTSMITH_ASC_KEY_PATH.*credentials\.json/);
     expect(() => playCredentials({}, tmp("home"))).toThrow(/SHOTSMITH_PLAY_KEY_PATH.*credentials\.json/);
@@ -67,6 +82,24 @@ describe("readKey", () => {
     const ws = tmp("ws");
     fs.writeFileSync(path.join(ws, "k.p8"), "KEY");
     expect(() => readKey(path.join(ws, "k.p8"), ws)).toThrow(/inside the workspace/);
+  });
+
+  it("refuses a key in the workspace when the workspace is reached through a link", () => {
+    const ws = tmp("ws");
+    fs.writeFileSync(path.join(ws, "k.p8"), "KEY");
+    const via = path.join(tmp("links"), "ws-link");
+    fs.symlinkSync(ws, via);
+    expect(() => readKey(path.join(ws, "k.p8"), via)).toThrow(/inside the workspace/);
+    expect(() => readKey(path.join(via, "k.p8"), ws)).toThrow(/inside the workspace/);
+    expect(() => readKey(path.join(via, "k.p8"), via)).toThrow(/inside the workspace/);
+  });
+
+  it("refuses a key inside a git working tree whose .git is a file, as in a worktree", () => {
+    const tree = tmp("worktree");
+    fs.writeFileSync(path.join(tree, ".git"), "gitdir: /elsewhere/.git/worktrees/x\n");
+    fs.writeFileSync(path.join(tree, "k.p8"), "KEY");
+    expect(gitWorkTree(fs.realpathSync(path.join(tree, "k.p8")))).toBe(fs.realpathSync(tree));
+    expect(() => readKey(path.join(tree, "k.p8"), tmp("ws"))).toThrow(/inside the git working tree/);
   });
 
   it("refuses a key inside a git working tree, also through a link", () => {

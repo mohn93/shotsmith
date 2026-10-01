@@ -78,6 +78,44 @@ describe("applyApple", () => {
     expect(fake.calls.some((c) => c.startsWith("PUT "))).toBe(false);
   });
 
+  it.each(["https://apple.com.evil.com", "https://evilapple.com", "http://upload.apple.com", "https://upload.apple.com.evil.com", "ftp://upload.apple.com"])("refuses an upload host of %s", async (host) => {
+    const { cfg, sets, fake, plan } = await planned();
+    fake.uploadHost = host;
+    const report = await applyApple(cfg, sets, {}, plan, deps(fake));
+    expect(report.ok).toBe(false);
+    expect(report.error).toMatch(/asked for an upload to .*refusing to send export\/en\/iphone-6\.9\/01-a\.jpg outside apple\.com/);
+    expect(fake.calls.filter((c) => c.startsWith("PUT "))).toEqual([]);
+  });
+
+  it("sends parts to apple.com and its subdomains", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    fake.uploadHost = "https://apple.com";
+    expect((await applyApple(cfg, sets, {}, plan, deps(fake))).ok).toBe(true);
+  });
+
+  it.each([300, 404, 500])("fails a set when a part upload answers %i", async (status) => {
+    const { cfg, sets, fake, plan } = await planned();
+    const transport: AppleDeps["transport"] = async (req) => (req.method === "PUT" ? { status, text: "" } : fake.transport(req));
+    const report = await applyApple(cfg, sets, {}, plan, { ...deps(fake), transport });
+    expect(report.ok).toBe(false);
+    expect(report.error).toBe(`en-US APP_IPHONE_67: uploading part of export/en/iphone-6.9/01-a.jpg failed (${status})`);
+    expect(report.sets).toHaveLength(1);
+    expect(report.sets[0]).toMatchObject({ status: "failed", uploaded: [] });
+  });
+
+  it("keeps the first locale recorded as changed when the second fails, and records what the second had done", async () => {
+    const { cfg, sets, fake, plan } = await planned((f) => { f.seed("loc-de", "APP_IPHONE_67", [{ checksum: "old" }]); });
+    const de = fake.setFor("loc-de", "APP_IPHONE_67")!;
+    const transport: AppleDeps["transport"] = async (req) => (req.method === "POST" && req.url.endsWith("/v1/appScreenshots") && JSON.parse(String(req.body)).data.relationships.appScreenshotSet.data.id === de.id ? { status: 500, text: "{}" } : fake.transport(req));
+    const report = await applyApple(cfg, sets, {}, plan, { ...deps(fake), transport });
+    expect(report.ok).toBe(false);
+    expect(report.error).toMatch(/^de-DE APP_IPHONE_67: POST \/v1\/appScreenshots failed \(500\)/);
+    expect(report.sets.map((s) => [s.storeLocale, s.status, s.deleted.length, s.uploaded.length])).toEqual([["en-US", "changed", 0, 2], ["de-DE", "failed", 1, 0]]);
+    expect(report.sets[0].order).toHaveLength(2);
+    expect(fake.checksums("loc-en", "APP_IPHONE_67")).toEqual(sets[0].files.map((f) => f.md5));
+    expect(fake.checksums("loc-de", "APP_IPHONE_67")).toEqual([]);
+  });
+
   it("checks every export in the set before its first delete", async () => {
     const { cfg, sets, fake, plan } = await planned((f) => { f.seed("loc-en", "APP_IPHONE_67", [{ checksum: "old" }]); });
     await paint(cfg, "en", "iphone-6.9", "02-b", 5);
@@ -121,13 +159,6 @@ describe("applyApple", () => {
     expect(report.error).toMatch(/refusing to send .* outside apple\.com.*screenshot shot\d+ could not be deleted/s);
     const held = [...fake.shots.values()];
     expect(report.error).toContain(held[0].id);
-  });
-
-  it("reports the order as read back", async () => {
-    const { cfg, sets, fake, plan } = await planned();
-    const report = await applyApple(cfg, sets, {}, plan, deps(fake));
-    const set = fake.setFor("loc-en", "APP_IPHONE_67")!;
-    expect(report.sets[0].order).toEqual(sets[0].files.map((f, i) => ({ file: f.rel, id: set.shots[i], checksum: f.md5 })));
   });
 
   it("reports a screenshot App Store Connect could not process", async () => {

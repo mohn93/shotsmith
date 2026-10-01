@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { EDITABLE } from "../../src/upload/apple.js";
 import type { HttpRequest, HttpResponse, Transport } from "../../src/upload/http.js";
 
 export const API = "https://api.appstoreconnect.apple.com";
@@ -10,8 +11,6 @@ const reply = (status: number, body?: unknown): HttpResponse => ({ status, text:
 const fail = (status: number, detail: string) => reply(status, { errors: [{ status: String(status), detail }] });
 const entityError = (detail: string) => reply(409, { errors: [{ status: "409", code: "ENTITY_ERROR", detail }] });
 const md5 = (b: Buffer) => crypto.createHash("md5").update(b).digest("hex");
-// Version states in which App Store Connect accepts screenshot changes.
-const EDITABLE = ["PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "INVALID_BINARY"];
 
 // An in-memory App Store Connect. Responses follow the API's JSON:API shapes and the fields the DNS Kit uploader used
 // against the live service. It is not a recording.

@@ -108,6 +108,18 @@ describe("applyPlay", () => {
     expect(fake.edits.size).toBe(0);
   });
 
+  it("discards the edit, with the earlier changed set, when a later set fails", async () => {
+    const { cfg, sets, fake, plan } = await planned((f) => { f.seed("de-DE", "phoneScreenshots", ["old"]); });
+    const transport: PlayDeps["transport"] = async (req) => (req.method === "POST" && req.url.includes("/listings/de-DE/") ? { status: 500, text: JSON.stringify({ error: { code: 500, message: "Backend error" } }) } : fake.transport(req));
+    const report = await applyPlay(cfg, sets, plan, { ...deps(fake), transport });
+    expect(report).toMatchObject({ ok: false, editId: null, editExpiresAt: null, error: expect.stringMatching(/^de-DE phoneScreenshots: POST .*failed \(500\): Backend error\. The draft edit was discarded, so the Google Play listing is unchanged$/) });
+    expect(report.sets.map((s) => [s.storeLocale, s.status, s.uploaded.length])).toEqual([["en-US", "discarded", 2], ["de-DE", "discarded", 0]]);
+    expect(fake.calls).not.toContain(`POST ${EDITS}/1002:validate`);
+    expect(fake.edits.size).toBe(0);
+    expect(fake.shas("en-US", "phoneScreenshots")).toEqual([]);
+    expect(fake.shas("de-DE", "phoneScreenshots")).toEqual(["old"]);
+  });
+
   it("uploads with uploadType=media", async () => {
     const fake = new FakePlay();
     const c = new PlayClient(deps(fake), "com.example.demo");
@@ -193,6 +205,16 @@ describe("commitPlay", () => {
   it("explains an edit Google discarded", async () => {
     const cfg = await uploadWorkspace({ export: false });
     await expect(commitPlay(cfg, "1001", {}, deps(new FakePlay()))).rejects.toThrow(/no longer has edit 1001.*expires, or it was already committed \(check Play Console\)\..*--apply again/s);
+  });
+
+  it("explains an edit Google no longer has, whether it answers 400 or 404, and leaves other 400s as they are", async () => {
+    const cfg = await uploadWorkspace({ export: false });
+    const answer = (status: number, message: string): PlayDeps => ({ transport: async () => ({ status, text: JSON.stringify({ error: { code: status, message } }) }), token: async () => "t" });
+    const gone = /^Google Play no longer has edit 1001: .*Run shotsmith upload play --apply again/;
+    await expect(commitPlay(cfg, "1001", {}, answer(400, "This Edit has been deleted."))).rejects.toThrow(gone);
+    await expect(commitPlay(cfg, "1001", {}, answer(400, "this edit has been deleted"))).rejects.toThrow(gone);
+    await expect(commitPlay(cfg, "1001", {}, answer(404, "Not Found"))).rejects.toThrow(gone);
+    await expect(commitPlay(cfg, "1001", {}, answer(400, "Something else is wrong."))).rejects.toThrow(/^POST applications\/com\.example\.demo\/edits\/1001:commit failed \(400\): Something else is wrong$/);
   });
 
   it("explains a 403 on commit", async () => {

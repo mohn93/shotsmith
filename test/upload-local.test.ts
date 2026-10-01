@@ -66,6 +66,29 @@ describe("localSets", () => {
     ]));
   });
 
+  it("keeps only the chosen locales' export findings", async () => {
+    const cfg = await uploadWorkspace();
+    fs.rmSync(path.join(cfg.root, "export/de/iphone-6.9/02-b.jpg"));
+    expect((await localSets(cfg, "apple", { locales: ["en"] })).problems).toEqual([]);
+    expect((await localSets(cfg, "apple", { locales: ["de"] })).problems).toEqual([expect.stringMatching(/store\.missing \(de\/iphone-6\.9\/02-b\)/)]);
+    fs.rmSync(path.join(cfg.root, "export/en/iphone-6.9/01-a.jpg"));
+    expect((await localSets(cfg, "apple", { locales: ["en"] })).problems).toEqual([expect.stringMatching(/store\.missing \(en\/iphone-6\.9\/01-a\)/)]);
+  });
+
+  it("gives both tablet slots of a locale the same files", async () => {
+    const cfg = await uploadWorkspace({ targets: ["android-tablet"] });
+    const { sets } = await localSets(cfg, "play");
+    expect(sets.map((s) => [s.locale, s.slot])).toEqual([["en", "sevenInchScreenshots"], ["en", "tenInchScreenshots"], ["de", "sevenInchScreenshots"], ["de", "tenInchScreenshots"]]);
+    expect(sets[1].files).toBe(sets[0].files);
+    expect(sets[3].files).toBe(sets[2].files);
+    expect(sets[2].files).not.toBe(sets[0].files);
+  });
+
+  it("reports two Android phone targets that fill the same slot", async () => {
+    const cfg = await uploadWorkspace({ export: false, targets: ["android-phone", { name: "pixel", w: 1080, h: 2400, platform: "android-phone" }] });
+    expect((await localSets(cfg, "play")).problems).toEqual(expect.arrayContaining([expect.stringMatching(/Targets "android-phone" and "pixel" both fill phoneScreenshots; keep one of them/)]));
+  });
+
   it("needs targets for the store", async () => {
     const cfg = await uploadWorkspace({ targets: ["android-phone"] });
     await expect(localSets(cfg, "apple")).rejects.toThrow(/no App Store targets/);
@@ -89,6 +112,22 @@ describe("plans", () => {
     expect(b.digest).toBe(a.digest);
     expect(makePlan({ ...base, sets: [set({ remove: [{ id: "2", checksum: "other", reason: "superseded" }] })] }).digest).not.toBe(a.digest);
     expect(makePlan({ ...base, version: "1.2", sets: [set()] }).digest).not.toBe(a.digest);
+  });
+
+  it("digests a change to the order, the uploads, the kept files, the status or the problems", () => {
+    const digest = (o: Partial<PlannedSet> = {}, problems: string[] = []) => makePlan({ ...base, problems, sets: [set(o)] }).digest;
+    const same = digest();
+    const changed = [
+      digest({ order: ["export/en/iphone-6.9/02-b.jpg", "export/en/iphone-6.9/01-a.jpg"] }),
+      digest({ upload: [{ file: "export/en/iphone-6.9/02-b.jpg", checksum: "other" }] }),
+      digest({ upload: [] }),
+      digest({ keep: [{ id: "1", file: "export/en/iphone-6.9/02-b.jpg" }] }),
+      digest({ keep: [] }),
+      digest({ status: "unchanged" }),
+      digest({}, ["a problem"]),
+      digest({ remove: [{ id: "2", checksum: "old", reason: "failed" }] }),
+    ];
+    expect(new Set([same, ...changed]).size).toBe(changed.length + 1);
   });
 
   it("writes, reads and compares saved plans", async () => {
