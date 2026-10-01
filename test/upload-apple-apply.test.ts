@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { type AppleDeps, applyApple, planApple } from "../src/upload/apple.js";
+import { type AppleDeps, AscClient, applyApple, planApple } from "../src/upload/apple.js";
 import { type LocalSet, localSets } from "../src/upload/local.js";
 import { FakeAsc } from "./upload/fake-asc.js";
 import { uploadWorkspace } from "./upload/workspace.js";
@@ -99,11 +99,51 @@ describe("applyApple", () => {
     expect(report.sets[0].uploaded).toHaveLength(2);
   });
 
+  it("logs each delete", async () => {
+    const lines: string[] = [];
+    let deletedId = "";
+    const { cfg, sets, fake, plan } = await planned((f) => { deletedId = f.seed("loc-en", "APP_IPHONE_67", [{ checksum: "old" }])[0]; });
+    await applyApple(cfg, sets, {}, plan, { ...deps(fake), log: (l) => lines.push(l) });
+    expect(lines).toContain(`en-US APP_IPHONE_67: deleted ${deletedId} (superseded)`);
+  });
+
+  it("polls each set's list once per round, with a growing wait", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    fake.processingPolls = 3;
+    const waits: number[] = [];
+    const report = await applyApple(cfg, sets, {}, plan, { ...deps(fake), sleep: async (ms) => { waits.push(ms); clock += ms; } });
+    expect(report.ok).toBe(true);
+    // Each of the two sets takes four rounds, so three waits that restart at 2 seconds.
+    expect(waits).toEqual([2000, 3000, 4500, 2000, 3000, 4500]);
+    expect(fake.calls.filter((c) => /^GET \/v1\/appScreenshots\/[^/]+$/.test(c))).toEqual([]);
+  });
+
+  it("fails when an uploaded screenshot disappears from its set", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    fake.processingPolls = 2;
+    const gone = deps(fake);
+    let first = true;
+    const report = await applyApple(cfg, sets, {}, plan, { ...gone, sleep: async (ms) => {
+      clock += ms;
+      if (first) { first = false; const set = fake.setFor("loc-en", "APP_IPHONE_67")!; fake.shots.delete(set.shots.pop()!); }
+    } });
+    expect(report.ok).toBe(false);
+    expect(report.error).toMatch(/en-US APP_IPHONE_67: screenshot shot\d+ disappeared from the set/);
+  });
+
   it("gives up after five minutes of processing", async () => {
     const { cfg, sets, fake, plan } = await planned();
     fake.processingPolls = 100_000;
     const report = await applyApple(cfg, sets, {}, plan, deps(fake));
     expect(report.error).toMatch(/still processing after 5 minutes/);
     expect(clock).toBeGreaterThanOrEqual(5 * 60_000);
+  });
+});
+
+describe("AscClient", () => {
+  it("never sends a request for a submission, and makes no call", async () => {
+    const fake = new FakeAsc();
+    await expect(new AscClient(deps(fake)).request("POST", "/v1/reviewSubmissions", {})).rejects.toThrow(/never submits for review/);
+    expect(fake.calls).toEqual([]);
   });
 });

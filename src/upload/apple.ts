@@ -23,6 +23,8 @@ export class AscClient {
     const url = route.startsWith("https://") ? route : `${ASC}${route}`;
     // links.next comes from the response; it is followed only within the API.
     if (!url.startsWith(`${ASC}/`)) throw new Error(`App Store Connect pointed to ${url}; Shotsmith only calls ${ASC}`);
+    // Shotsmith never submits for review, whatever the plan says.
+    if (/submission/i.test(new URL(url).pathname)) throw new Error(`Refusing ${method} ${route}: Shotsmith never submits for review`);
     const r = await this.d.transport({
       method,
       url,
@@ -138,7 +140,8 @@ export async function planApple(cfg: ResolvedConfig, local: LocalSet[], o: { ver
 }
 
 export const PROCESSING_LIMIT_MS = 5 * 60_000;
-const POLL_MS = 2000;
+const POLL_START_MS = 2000;
+const POLL_MAX_MS = 10_000;
 const md5 = (b: Buffer) => crypto.createHash("md5").update(b).digest("hex");
 interface Run { log: (line: string) => void; now: () => number; sleep: (ms: number) => Promise<void> }
 
@@ -187,6 +190,7 @@ async function applySet(c: AscClient, s: AppleSet, rec: AppliedSet, run: Run): P
     for (const r of p.remove) {
       await c.request("DELETE", `/v1/appScreenshots/${r.id}`);
       rec.deleted.push(r.id);
+      run.log(`${where}: deleted ${r.id} (${r.reason})`);
     }
     const ids = new Map(p.keep.map((k) => [k.file, k.id]));
     for (const u of p.upload) {
@@ -195,7 +199,7 @@ async function applySet(c: AscClient, s: AppleSet, rec: AppliedSet, run: Run): P
       rec.uploaded.push({ file: u.file, id });
       run.log(`${where}: uploaded ${u.file}`);
     }
-    await waitProcessed(c, rec.uploaded.map((u) => u.id), run);
+    await waitProcessed(c, setId, rec.uploaded.map((u) => u.id), run);
     const order = p.order.map((file) => ({ file, id: ids.get(file)!, checksum: md5Of(file) }));
     await c.request("PATCH", `/v1/appScreenshotSets/${setId}/relationships/appScreenshots`, { data: order.map((x) => ({ type: "appScreenshots", id: x.id })) });
     // Read back what App Store Connect now holds.
@@ -231,13 +235,17 @@ async function uploadShot(c: AscClient, setId: string, f: LocalFile): Promise<st
   return shot.id;
 }
 
-async function waitProcessed(c: AscClient, ids: string[], run: Run): Promise<void> {
+// One list request per round, not one per screenshot; the wait grows from 2 to 10 seconds.
+async function waitProcessed(c: AscClient, setId: string, ids: string[], run: Run): Promise<void> {
   const deadline = run.now() + PROCESSING_LIMIT_MS;
   let pending = [...ids];
+  let wait = POLL_START_MS;
   while (pending.length) {
+    const shots = new Map((await c.all(`/v1/appScreenshotSets/${setId}/appScreenshots?limit=200`)).map((r) => [r.id, r]));
     const next: string[] = [];
     for (const id of pending) {
-      const shot = (await c.request("GET", `/v1/appScreenshots/${id}`)).data as Resource;
+      const shot = shots.get(id);
+      if (!shot) throw new Error(`screenshot ${id} disappeared from the set`);
       const delivery = shot.attributes.assetDeliveryState ?? {};
       if (delivery.state === "FAILED") throw new Error(`App Store Connect could not process screenshot ${id}: ${JSON.stringify(delivery.errors ?? [])}`);
       if (delivery.state !== "COMPLETE") next.push(id);
@@ -247,6 +255,7 @@ async function waitProcessed(c: AscClient, ids: string[], run: Run): Promise<voi
     if (run.now() >= deadline) {
       throw new Error(`${pending.length} screenshot(s) still processing after 5 minutes. Plan again later: finished screenshots are kept and unfinished ones replaced`);
     }
-    await run.sleep(POLL_MS);
+    await run.sleep(wait);
+    wait = Math.min(Math.round(wait * 1.5), POLL_MAX_MS);
   }
 }
