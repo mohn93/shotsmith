@@ -1,0 +1,42 @@
+<!doctype html>
+<html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import * as S from "./system.js";
+const { C, el } = S;
+const stage = S.setup();
+
+S.atmosphere(stage, {
+  top: "#4b1d6e", bot: "#050407",
+  glows: [
+    { x: 0.5, y: -0.1, rx: 1.0, ry: 0.5, c: "#5a2383", a: 0.45 },
+    { x: 0.1, y: 0.7, rx: 0.5, ry: 0.4, c: "#2c1250", a: 0.35 },
+    { x: 0.9, y: 1.0, rx: 0.5, ry: 0.4, c: "#24104a", a: 0.30 },
+  ],
+  vignette: 0.2, grain: 0.02,
+});
+
+const LY = S.L({
+  tall: { top: 150, size: 112, gtop: 650, gap: 128, icon: 140, lab: 52, row: false },
+  p916: { top: 110, size: 104, gtop: 500, gap: 76, icon: 118, lab: 46, row: false },
+  t43:  { top: 90, size: 96, gtop: 450, gap: 100, icon: 90, lab: 42, row: true },
+  t916: { top: 120, size: 108, gtop: 560, gap: 96, icon: 124, lab: 48, row: false },
+});
+S.titleBlock(stage, { top: LY.top, lines: ["All this.", "In one app."], size: LY.size });
+
+const items = [
+  ["lookup", "DNS Record Lookups"], ["compare", "Compare Mode"],
+  ["spf", "SPF & DMARC Checks"], ["dkim", "DKIM Discovery"],
+  ["resolvers", "37 Resolver Endpoints"], ["map", "Propagation Map"],
+  ["monitor", "Health Monitors"], ["bell", "Push Alerts"],
+  ["history", "Check History"], ["library", "Saved Domains"],
+];
+const grid = el("div", { class: "abs", style: { left: LY.row ? "110px" : "60px", top: LY.gtop + "px", width: LY.row ? "1090px" : "1140px", display: "grid",
+  gridTemplateColumns: "1fr 1fr", rowGap: LY.gap + "px", columnGap: LY.row ? "40px" : "0", zIndex: 20 } }, stage);
+for (const [k, label] of items) {
+  el("div", { style: LY.row ? { display: "flex", alignItems: "center", gap: "28px", whiteSpace: "nowrap" } : { display: "flex", flexDirection: "column", alignItems: "center", gap: "30px" } }, grid,
+    `${S.lineIcon(k, { size: LY.icon })}
+     <div style="font:400 ${LY.lab}px/1.15 UIDisplay;letter-spacing:-0.004em;color:rgba(228,218,245,0.74);text-align:${LY.row ? "left" : "center"}">${label}</div>`);
+}
+S.ready();
+</script>
+</body></html>

@@ -1,0 +1,203 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import * as K from "./common.js";
+const { W, H } = K;
+const cvs = K.pageShell();
+await K.loadFonts();
+const cap = await K.loadImg("/inputs/3.png");
+
+// ---- layout ----
+const screenW = 860;
+const g = K.deviceGeom((W - screenW) / 2, 1110, screenW);
+const G = { x: W / 2, y: 1240, r: 600 };           // globe centre / radius (px)
+const LON0 = -30, LAT0 = 18;                        // view centre
+// Servers (approx. from the checkmarks on the capture's map), lon/lat
+const servers = [
+  [-74, 40.7], [-77.5, 39], [-87.6, 41.8], [-96.8, 32.8], [-73.6, 45.5], [-0.1, 51.5], [4.9, 52.4],
+  [8.7, 50.1], [2.3, 48.9], [18.1, 59.3], [21, 52.2], [16.4, 48.2], [9.2, 45.5], [23.7, 38],
+  [29, 41], [34.8, 32.1], [55.3, 25.2], [46.7, 24.7], [72.9, 19.1], [77.6, 13], [103.8, 1.3],
+  [106.8, -6.2], [-46.6, -23.5],
+];
+const HUB = [-77.5, 39];                             // authoritative NS (Ashburn)
+const rad = Math.PI / 180;
+const toVec = ([lon, lat]) => [Math.cos(lat * rad) * Math.sin(lon * rad), Math.sin(lat * rad), Math.cos(lat * rad) * Math.cos(lon * rad)];
+// world -> view: rotate by -LON0 around y, then by LAT0 around x
+function view(v) {
+  const a = -LON0 * rad, b = LAT0 * rad;
+  const x1 = v[0] * Math.cos(a) + v[2] * Math.sin(a), z1 = -v[0] * Math.sin(a) + v[2] * Math.cos(a), y1 = v[1];
+  const y2 = y1 * Math.cos(b) - z1 * Math.sin(b), z2 = y1 * Math.sin(b) + z1 * Math.cos(b);
+  return [x1, y2, z2];
+}
+const proj = (v) => [G.x + v[0] * G.r, G.y - v[1] * G.r];
+
+// ---- fx layer: great-circle arcs from the hub to every server ----
+const fx = K.canvas(); const fc = fx.getContext("2d");
+fc.globalCompositeOperation = "lighter";
+const hubV = toVec(HUB);
+function slerp(a, b, t) {
+  const d = Math.acos(Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
+  const s = Math.sin(d); const k1 = Math.sin((1 - t) * d) / s, k2 = Math.sin(t * d) / s;
+  return [a[0] * k1 + b[0] * k2, a[1] * k1 + b[1] * k2, a[2] * k1 + b[2] * k2];
+}
+servers.forEach((sv, i) => {
+  const bv = toVec(sv);
+  const d = Math.acos(hubV[0] * bv[0] + hubV[1] * bv[1] + hubV[2] * bv[2]);
+  if (d < 0.05) return;
+  const lift = Math.min(0.10, 0.04 + 0.09 * d);
+  const pts = [];
+  for (let k = 0; k <= 90; k++) {
+    const t = k / 90; const v = slerp(hubV, bv, t); const h = 1 + lift * Math.sin(Math.PI * t);
+    const vv = view([v[0] * h, v[1] * h, v[2] * h]);
+    const vis = vv[2] > 0 || Math.hypot(vv[0], vv[1]) > 1;
+    pts.push([...proj(vv), t, vis]);
+  }
+  for (const pass of [[9, 0.10, 14], [2.6, 0.9, 0]]) {
+    fc.lineWidth = pass[0]; fc.lineCap = "round";
+    if (pass[2]) fc.filter = `blur(${pass[2]}px)`; else fc.filter = "none";
+    for (let k = 1; k < pts.length; k++) {
+      const [x0, y0, , v0] = pts[k - 1]; const [x1, y1, t, v1] = pts[k];
+      if (!v0 || !v1) continue;
+      const a = pass[1] * (0.25 + 0.75 * Math.pow(t, 1.5));
+      fc.strokeStyle = `rgba(${Math.round(90 + 60 * t)},${Math.round(170 + 60 * t)},255,${a})`;
+      fc.beginPath(); fc.moveTo(x0, y0); fc.lineTo(x1, y1); fc.stroke();
+    }
+  }
+  // travelling packet
+  const pt = pts[Math.round(55 + ((i * 37) % 30))];
+  if (pt[3]) {
+    fc.filter = "blur(6px)"; fc.fillStyle = "rgba(160,230,255,0.9)";
+    fc.beginPath(); fc.arc(pt[0], pt[1], 9, 0, 7); fc.fill();
+    fc.filter = "none"; fc.fillStyle = "#fff";
+    fc.beginPath(); fc.arc(pt[0], pt[1], 3.2, 0, 7); fc.fill();
+  }
+});
+
+// ---- ui layer ----
+const ui = K.canvas(); const cx = ui.getContext("2d");
+K.eyebrow(cx, "GLOBAL PROPAGATION", { y: 176 });
+K.headline(cx, ["See DNS changes", "go global."], {
+  y: 392, size: 112, sub: "Checks across public resolvers worldwide.", subSize: 44, subGap: 40,
+});
+K.drawDevice(cx, cap, g);
+const mask = K.deviceMask(g, 0.25, 50);
+
+const gl = K.initGL(cvs);
+const srvView = servers.map((s) => view(toVec(s))).flat();
+const hubView = view(hubV);
+const fs = `#version 300 es
+${K.GLSL_COMMON}
+uniform sampler2D uUI, uMask, uCap, uFX;
+uniform vec3 uG; uniform vec2 uView; uniform vec4 uScreen; uniform vec3 uSrv[23]; uniform vec3 uHub;
+out vec4 o;
+const float PI = 3.14159265;
+
+// lat/lon -> capture map pixel (Web Mercator fit measured from the capture)
+vec2 mapPx(float lon, float lat){
+  float x = (227.6 + 2.094*lon) * 5.278;
+  float m = log(tan(PI*.25 + lat*PI/360.));
+  float y = (724.7 - 120.*m) * 5.278;
+  return vec2(x, y);
+}
+float landAt(float lon, float lat){
+  vec2 m = mapPx(lon, lat);
+  if (m.x < 4. || m.x > 2424. || m.y < 1930. || m.y > 5200.) return 0.;
+  if (length(m - vec2(2180., 4845.)) < 190.) return 0.;         // FAB button
+  vec4 c = textureLod(uCap, m/vec2(2428.,5275.), 2.5);
+  if (c.a < .5) return 0.;
+  vec3 k = c.rgb/c.a;
+  return smoothstep(-.11,-.05, k.r - k.b);
+}
+mat3 rotY(float a){ float c=cos(a), s=sin(a); return mat3(c,0.,-s, 0.,1.,0., s,0.,c); }
+mat3 rotX(float a){ float c=cos(a), s=sin(a); return mat3(1.,0.,0., 0.,c,s, 0.,-s,c); }
+
+vec3 globe(vec2 p, out float cov){
+  vec2 q = (p - uG.xy)/uG.z; q.y = -q.y;
+  float r2 = dot(q,q); float r = sqrt(r2);
+  vec3 c = vec3(0.);
+  cov = 0.;
+  // atmosphere outside the limb
+  float edge = (r-1.)*uG.z;
+  c += mix(BLUE, CYAN, .45) * exp(-max(edge,0.)/38.) * .55 * step(1.,r);
+  c += BLUE * exp(-max(edge,0.)/190.) * .28 * step(1.,r);
+  if (r >= 1.) return c;
+  float aa = 1.-smoothstep(-1.2, .4, edge);
+  cov = aa;
+  vec3 nv = vec3(q, sqrt(1.-r2));                 // view space normal
+  // view -> world (inverse of JS view())
+  vec3 v1 = vec3(nv.x, nv.y*cos(uView.y) + nv.z*sin(uView.y), -nv.y*sin(uView.y) + nv.z*cos(uView.y));
+  float a = -uView.x;
+  vec3 w = vec3(v1.x*cos(a) - v1.z*sin(a), v1.y, v1.x*sin(a) + v1.z*cos(a));
+  float lat = degrees(asin(clamp(w.y,-1.,1.)));
+  float lon = degrees(atan(w.x, w.z));
+  // lighting
+  vec3 L = normalize(vec3(-.45,.6,.65));
+  float dif = clamp(dot(nv, L), 0., 1.);
+  float fres = pow(1.-nv.z, 2.2);
+  vec3 ocean = vec3(.012,.03,.085) + BLUE*.10*dif;
+  c = ocean + mix(BLUE,CYAN,.3)*fres*.55;
+  // dot matrix
+  float step_ = 1.45;
+  float row = floor(lat/step_ + .5);
+  float clat = row*step_;
+  float lstep = step_/max(cos(radians(clat)), .08);
+  float col_ = floor(lon/lstep + .5);
+  float clon = col_*lstep;
+  vec2 dd = vec2((lon-clon)*cos(radians(lat)), lat-clat);
+  float dist = length(dd)/step_;                        // 0..~.7
+  float land = landAt(clon, clat);
+  float dotm = smoothstep(.34, .22, dist);
+  vec3 dc = mix(vec3(.25,.5,1.), vec3(.78,.9,1.), dif);
+  c += dc * dotm * land * (.35 + .9*dif);
+  c += BLUE * dotm * (1.-land) * .05;                   // faint ocean lattice
+  // server pulses (green = responded)
+  for (int i=0;i<23;i++){
+    vec3 s = uSrv[i];
+    float ang = acos(clamp(dot(nv, s), -1., 1.)) * uG.z;      // px along surface (approx)
+    float vis = step(0., s.z);
+    float core = exp(-pow(ang/5.,2.));
+    float halo = exp(-ang/14.)*.35;
+    float ring = exp(-pow((ang-17.)/1.8,2.))*.5 + exp(-pow((ang-30.)/1.6,2.))*.18;
+    c += mix(GREEN, vec3(.6,1.,.85), core) * (core*1.6 + halo + ring) * vis;
+  }
+  // hub
+  float ah = acos(clamp(dot(nv, uHub), -1., 1.)) * uG.z;
+  c += vec3(.75,.9,1.) * (exp(-pow(ah/7.,2.))*1.5 + exp(-ah/30.)*.5 + exp(-pow((ah-40.)/2.5,2.))*.5);
+  return c*aa;
+}
+
+vec3 bg(vec2 p){
+  vec2 uv = p/uRes.x;
+  vec3 c = night(uv);
+  c += meshGlow(uv, vec2(.5,.95), 9.0) * .8;
+  // faint star dust
+  vec2 cell = floor(p/14.); float h = hash12(cell);
+  vec2 sp = (cell + .2 + .6*hash22(cell+7.7))*14.;
+  float star = exp(-dot(p-sp,p-sp)/1.1) * step(.985, h) * (.3 + .7*hash12(cell+3.1));
+  c += vec3(.65,.8,1.) * star * .9 * smoothstep(1.3,.1,uv.y);
+  return c;
+}
+
+void main(){
+  vec2 p = px(); vec2 uv = p/uRes;
+  vec3 col = bg(p);
+  float cov;
+  vec3 gc = globe(p, cov);
+  col = col*(1.-cov) + gc;
+  col += texture(uFX, uv).rgb;
+  col += vec3(.22,.45,1.) * texture(uMask, uv).r * .28;
+  vec4 ui = texture(uUI, uv);
+  col = ui.rgb + col*(1.-ui.a);
+  vec2 vq = (uv-.5)*vec2(1.,.9);
+  col *= 1. - .35*dot(vq,vq);
+  col = finish(col, p, .018);
+  o = vec4(col, 1.);
+}`;
+const prog = K.program(gl, fs);
+gl.useProgram(prog);
+gl.uniform3fv(gl.getUniformLocation(prog, "uSrv"), new Float32Array(srvView));
+K.run(gl, prog, {
+  textures: { uUI: K.texture(gl, ui), uMask: K.texture(gl, mask), uCap: K.texture(gl, cap, { mip: true }), uFX: K.texture(gl, fx) },
+  uniforms: { uRes: [W, H], uG: [G.x, G.y, G.r], uView: [LON0 * rad, LAT0 * rad], uScreen: [g.x, g.y, g.screenW, g.screenH], uHub: hubView },
+});
+window.__ready = true;
+</script></body></html>

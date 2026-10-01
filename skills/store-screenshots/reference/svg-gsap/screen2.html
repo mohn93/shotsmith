@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"gsap":"/node_modules/gsap/index.js"}}</script>
+</head><body><div class="stage" id="stage"></div>
+<script type="module">
+import { scene2 } from "./scenes.js";
+import { loadImages } from "./lib.js";
+await loadImages(["/inputs/2.png"]);
+const { tl } = scene2(document.getElementById("stage"));
+tl.progress(1);
+await document.fonts.ready;
+await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+window.__ready = true;
+</script></body></html>

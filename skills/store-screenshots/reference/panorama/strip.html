@@ -1,0 +1,340 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face{font-family:Inter;src:url(/fonts/Inter-Regular.ttf);font-weight:400}
+@font-face{font-family:Inter;src:url(/fonts/Inter-Bold.ttf);font-weight:700}
+@font-face{font-family:Inter;src:url(/fonts/Inter-ExtraBold.ttf);font-weight:800}
+html,body{margin:0;width:5040px;height:2736px;overflow:hidden;background:#040916}
+canvas{position:absolute;left:0;top:0;z-index:0}
+.t{position:absolute;top:0;width:1260px;text-align:center;color:#fff;font-family:Inter;z-index:2}
+.eb{margin-top:196px;display:inline-flex;align-items:center;gap:16px;font-weight:700;font-size:36px;letter-spacing:.18em;
+  color:#93c5fd;padding:14px 32px 14px 26px;border:2px solid rgba(147,197,253,.28);border-radius:100px;background:rgba(37,99,235,.16)}
+.eb i{width:14px;height:14px;border-radius:50%;background:#34d399;box-shadow:0 0 18px #34d399}
+.h{margin:42px auto 0;font-weight:800;font-size:126px;line-height:1.02;letter-spacing:-.04em;width:1160px;
+  text-shadow:0 8px 40px rgba(2,6,23,.6)}
+.h em{font-style:normal;background:linear-gradient(92deg,#60a5fa 0%,#38bdf8 45%,#34d399 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.s{margin:36px auto 0;font-size:47px;color:rgba(219,228,255,.74);font-weight:400;width:1040px;line-height:1.28;letter-spacing:-.005em}
+</style></head>
+<body>
+<div class="t" style="left:0"><div class="eb"><i></i>HEALTH SCORE</div>
+  <div class="h">Know your<br>domain's <em>health</em></div>
+  <div class="s">DNS and email setup, scored in seconds</div></div>
+<div class="t" style="left:1260px"><div class="eb"><i></i>MAIL DIAGNOSTICS</div>
+  <div class="h">Fix email<br><em>before it bounces</em></div>
+  <div class="s">SMTP, PTR, TLS and blacklist checks</div></div>
+<div class="t" style="left:2520px"><div class="eb"><i></i>PROPAGATION</div>
+  <div class="h">Watch DNS<br><em>go global</em></div>
+  <div class="s">Results from resolvers worldwide</div></div>
+<div class="t" style="left:3780px"><div class="eb"><i></i>ALL DOMAINS</div>
+  <div class="h">Every domain,<br><em>one glance</em></div>
+  <div class="s">Health scores for everything you run</div></div>
+
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/","gsap":"/node_modules/gsap/index.js"}}</script>
+<script type="module">
+import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+const W = 5040, H = 2736, FOV = 20;
+const D = (H / 2) / Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+const k = (z) => (D - z) / D;                       // world size per screen px at depth z
+const P = (sx, sy, z = 0) => new THREE.Vector3((sx - W / 2) * k(z), (H / 2 - sy) * k(z), z);
+const rad = THREE.MathUtils.degToRad;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.autoClear = false;
+document.body.prepend(renderer.domElement);
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+const camera = new THREE.PerspectiveCamera(FOV, W / H, 50, 60000);
+camera.position.set(0, 0, D);
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.9;
+const key = new THREE.DirectionalLight(0x9db8ff, 1.6); key.position.set(-1, 1.2, 1); scene.add(key);
+
+// ---------- shared GLSL ----------
+const NOISE = `
+float hash(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y); }
+float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.03; a*=.5; } return v; }`;
+
+// ---------- background field (continuous across all 4 screens) ----------
+const bgScene = new THREE.Scene();
+const bgCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+bgScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: { res: { value: new THREE.Vector2(W, H) } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`,
+  fragmentShader: `varying vec2 vUv; uniform vec2 res; ${NOISE}
+  vec3 hueAt(float x){ // brand blue -> cyan -> green across the strip
+    vec3 b=vec3(.15,.39,.92), c=vec3(.13,.62,.95), g=vec3(.06,.73,.51);
+    return x<.5 ? mix(b,c,smoothstep(0.,.5,x)) : mix(c,g,smoothstep(.5,1.,x)); }
+  void main(){
+    float ar = res.x/res.y; vec2 p = vec2(vUv.x*ar, vUv.y); float y=vUv.y, x=vUv.x;
+    vec3 col = mix(vec3(.020,.045,.120), vec3(.010,.020,.058), smoothstep(.05,.95,y));
+    // soft pools of light behind each hero zone
+    for(int i=0;i<4;i++){ float cx=(float(i)+.5)/4.; float d=length(vec2((x-cx)*ar*1.1, (y-.42)*1.25));
+      col += hueAt(cx)*.13*exp(-d*d*7.); }
+    // aurora ribbon flowing across the whole strip
+    float n = fbm(vec2(p.x*.9, 1.3)+vec2(0.,p.y*.6));
+    float c1 = .30 + .10*sin(p.x*1.7+.6) + .05*sin(p.x*4.3+1.9) + .12*(n-.5);
+    float band = exp(-pow((y-c1)/.085,2.));
+    float curtain = .55+.45*fbm(vec2(p.x*14., y*1.5));
+    col += hueAt(x)*band*curtain*.42;
+    float c2 = .78 + .06*sin(p.x*2.2+2.4) + .08*(fbm(vec2(p.x*1.4,7.))-.5);
+    col += hueAt(1.-x)*exp(-pow((y-c2)/.06,2.))*(.5+.5*fbm(vec2(p.x*11.,3.)))*.10;
+    // dot lattice, fading in and out with a noise field
+    vec2 g = gl_FragCoord.xy/46.; vec2 f = fract(g)-.5;
+    float dots = smoothstep(.11,.06,length(f)) * smoothstep(.35,.75,fbm(g*.06+3.)) ;
+    col += vec3(.45,.6,1.)*dots*.10;
+    col *= .78 + .22*smoothstep(0.,.25,y);
+    col += (hash(gl_FragCoord.xy)-.5)/255.*2.;
+    gl_FragColor = vec4(col,1.);
+  }` , depthWrite: false })));
+
+// ---------- helpers ----------
+const loadImg = (src) => new Promise((r, j) => { const i = new Image(); i.onload = () => r(i); i.onerror = j; i.src = src; });
+const imgs = await Promise.all([1, 2, 3, 4].map((i) => loadImg(`/inputs/${i}.png`)));
+const SW = 2428, SH = 5275;
+
+function roundRectShape(w, h, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.absarc(x + w - r, y + r, r, -Math.PI / 2, 0);
+  s.lineTo(x + w, y + h - r); s.absarc(x + w - r, y + h - r, r, 0, Math.PI / 2);
+  s.lineTo(x + r, y + h); s.absarc(x + r, y + h - r, r, Math.PI / 2, Math.PI);
+  s.lineTo(x, y + r); s.absarc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
+  return s;
+}
+function texFromCanvas(c) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxAniso; return t; }
+function radialTex(stops, size = 256) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const g = c.getContext("2d");
+  const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  stops.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, size, size);
+  return texFromCanvas(c);
+}
+const glowTex = radialTex([[0, "rgba(255,255,255,1)"], [0.18, "rgba(255,255,255,.55)"], [0.45, "rgba(255,255,255,.12)"], [1, "rgba(255,255,255,0)"]]);
+function sprite(tex, color, size, opacity = 1) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity, toneMapped: false }));
+  s.scale.set(size, size, 1); return s;
+}
+
+// ---------- device ----------
+function device(img, screenH) {
+  const g = new THREE.Group();
+  const sw = screenH * SW / SH, bez = screenH * 0.017, bw = sw + 2 * bez, bh = screenH + 2 * bez;
+  const r = sw * 0.145 + bez, depth = screenH * 0.034, bs = bez * 0.55, bt = screenH * 0.009;
+  const bodyGeo = new THREE.ExtrudeGeometry(roundRectShape(bw - 2 * bs, bh - 2 * bs, r - bs),
+    { depth, bevelEnabled: true, bevelThickness: bt, bevelSize: bs, bevelSegments: 10, curveSegments: 64 });
+  bodyGeo.translate(0, 0, -depth - bt);
+  const metal = new THREE.MeshPhysicalMaterial({ color: 0x3a4458, metalness: 1, roughness: 0.26, clearcoat: 0.6, clearcoatRoughness: 0.2 });
+  g.add(new THREE.Mesh(bodyGeo, metal));
+  const glass = new THREE.Mesh(new THREE.ShapeGeometry(roundRectShape(bw - bs * 0.9, bh - bs * 0.9, r - bs * 0.45), 64),
+    new THREE.MeshPhysicalMaterial({ color: 0x020308, metalness: 0, roughness: 0.08, clearcoat: 1 }));
+  glass.position.z = 0.6; g.add(glass);
+  // buttons
+  const btn = (x, y, h) => { const m = new THREE.Mesh(new THREE.BoxGeometry(bez * 0.7, h, depth * 0.55), metal); m.position.set(x, y, -depth / 2 - bt); g.add(m); };
+  btn(-bw / 2 - bez * 0.2, bh * 0.28, bh * 0.035); btn(-bw / 2 - bez * 0.2, bh * 0.18, bh * 0.07); btn(-bw / 2 - bez * 0.2, bh * 0.08, bh * 0.07);
+  btn(bw / 2 + bez * 0.2, bh * 0.16, bh * 0.11);
+  const tex = new THREE.Texture(img); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = maxAniso; tex.needsUpdate = true;
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(sw, screenH), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false }));
+  screen.position.z = 1.2; g.add(screen);
+  // faint glass sheen
+  const sc = document.createElement("canvas"); sc.width = 64; sc.height = 256; const sg = sc.getContext("2d");
+  const lg = sg.createLinearGradient(0, 0, 64, 256); lg.addColorStop(0, "rgba(255,255,255,.10)"); lg.addColorStop(.42, "rgba(255,255,255,.03)"); lg.addColorStop(.43, "rgba(255,255,255,0)"); lg.addColorStop(1, "rgba(255,255,255,0)");
+  sg.fillStyle = lg; sg.fillRect(0, 0, 64, 256);
+  const sheen = new THREE.Mesh(new THREE.ShapeGeometry(roundRectShape(sw, screenH, sw * 0.145), 48), new THREE.MeshBasicMaterial({ map: texFromCanvas(sc), transparent: true, depthWrite: false, toneMapped: false }));
+  const uvs = sheen.geometry.attributes.uv, pos = sheen.geometry.attributes.position;
+  for (let i = 0; i < uvs.count; i++) uvs.setXY(i, pos.getX(i) / sw + .5, pos.getY(i) / screenH + .5);
+  sheen.position.z = 1.8; g.add(sheen);
+  g.userData = { w: bw, h: bh };
+  return g;
+}
+
+// ---------- lifted UI card (real capture pixels) ----------
+function card(img, [x0, y0, x1, y1], width, radius = 56, shadow = 0.55) {
+  const sw = x1 - x0, sh = y1 - y0, h = width * sh / sw;
+  const c = document.createElement("canvas"); c.width = sw; c.height = sh; const g = c.getContext("2d");
+  g.beginPath(); g.roundRect(0, 0, sw, sh, radius); g.clip(); g.drawImage(img, x0, y0, sw, sh, 0, 0, sw, sh);
+  g.lineWidth = 6; g.strokeStyle = "rgba(30,41,59,.10)"; g.beginPath(); g.roundRect(3, 3, sw - 6, sh - 6, radius - 3); g.stroke();
+  const grp = new THREE.Group();
+  // shadow
+  const pad = 120, sc = document.createElement("canvas"), s = 0.25;
+  sc.width = (sw + pad * 2 * (sw / width)) * s; sc.height = (sh + pad * 2 * (sw / width)) * s;
+  const sg = sc.getContext("2d"); const pp = pad * (sw / width) * s;
+  sg.filter = `blur(${pp * 0.42}px)`; sg.fillStyle = "rgba(0,4,20,1)"; sg.beginPath(); sg.roundRect(pp, pp, sw * s, sh * s, radius * s); sg.fill();
+  const shm = new THREE.Mesh(new THREE.PlaneGeometry(width + pad * 2, h + pad * 2),
+    new THREE.MeshBasicMaterial({ map: texFromCanvas(sc), transparent: true, opacity: shadow, depthWrite: false, toneMapped: false }));
+  shm.position.set(0, -h * 0.07, -40); grp.add(shm);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(width, h), new THREE.MeshBasicMaterial({ map: texFromCanvas(c), transparent: true, toneMapped: false }));
+  grp.add(m);
+  grp.userData = { w: width, h };
+  return grp;
+}
+
+const gScene = new THREE.Scene();
+function place(obj, sx, sy, z, rot = [0, 0, 0], sc = scene) {
+  obj.position.copy(P(sx, sy, z));
+  obj.scale.setScalar(k(z));
+  obj.rotation.set(rad(rot[0]), rad(rot[1]), rad(rot[2]));
+  sc.add(obj); return obj;
+}
+
+// ---------- glow tube (additive, fresnel falloff) ----------
+function glowTube(curve, radius, { power = 2, intensity = 1, pulses = 0, cols = ["#3b82f6", "#22d3ee", "#34d399"], segs = 900 } = {}) {
+  const geo = new THREE.TubeGeometry(curve, segs, radius, 20, false);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { power: { value: power }, intensity: { value: intensity }, pulses: { value: pulses },
+      cA: { value: new THREE.Color(cols[0]) }, cB: { value: new THREE.Color(cols[1]) }, cC: { value: new THREE.Color(cols[2]) } },
+    vertexShader: `varying vec3 vN; varying vec3 vV; varying vec2 vUv;
+      void main(){ vUv=uv; vec4 mv=modelViewMatrix*vec4(position,1.); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `varying vec3 vN; varying vec3 vV; varying vec2 vUv; uniform float power,intensity,pulses; uniform vec3 cA,cB,cC;
+      void main(){ float f=abs(dot(normalize(vN),normalize(vV))); float a=pow(f,power)*intensity;
+        float u=vUv.x; a*=smoothstep(0.,.025,u)*smoothstep(1.,.975,u);
+        vec3 c = u<.5 ? mix(cA,cB,u*2.) : mix(cB,cC,(u-.5)*2.);
+        if(pulses>0.){ float q=fract(u*pulses+.15); a*= .55 + 1.6*exp(-pow((q-.5)/.035,2.)); }
+        gl_FragColor=vec4(c*a,1.); }`,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  return new THREE.Mesh(geo, mat);
+}
+function cable(points, opts = {}) {
+  const curve = new THREE.CatmullRomCurve3(points.map((p) => p.isVector3 ? p : P(...p)), false, "centripetal", 0.5);
+  const g = new THREE.Group();
+  g.add(glowTube(curve, 90, { power: 3.5, intensity: 0.13, ...opts }));
+  g.add(glowTube(curve, 30, { power: 2.2, intensity: 0.42, ...opts }));
+  g.add(glowTube(curve, 8, { power: 0.6, intensity: 1.0, ...opts, cols: ["#bfdbfe", "#cffafe", "#d1fae5"] }));
+  scene.add(g); return curve;
+}
+
+// ================= COMPOSITION =================
+const CFG = window.CFG || {};
+
+// --- globe (screen 3 -> 4) ---
+let HUB;
+const G = { sx: 3470, sy: 1640, z: -500, R: 760, lon0: 13, lat0: 26, tilt: -10 };
+{
+  const root = new THREE.Group(), tiltG = new THREE.Group(), spin = new THREE.Group();
+  root.add(tiltG); tiltG.add(spin);
+  tiltG.rotation.set(rad(G.lat0), 0, rad(G.tilt)); spin.rotation.y = rad(-G.lon0);
+  const R = G.R;
+  const body = new THREE.Mesh(new THREE.SphereGeometry(R, 128, 96), new THREE.ShaderMaterial({
+    vertexShader: `varying vec3 vN; varying vec3 vV; void main(){ vec4 mv=modelViewMatrix*vec4(position,1.); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `varying vec3 vN; varying vec3 vV; void main(){ float f=1.-max(dot(vN,vV),0.);
+      vec3 c=mix(vec3(.018,.04,.11), vec3(.10,.30,.78), pow(f,2.6));
+      c += vec3(.05,.10,.25)*pow(max(dot(vN,normalize(vec3(-.4,.7,.5))),0.),2.);
+      gl_FragColor=vec4(c,1.); }` }));
+  spin.add(body);
+  const atmo = new THREE.Mesh(new THREE.SphereGeometry(R * 1.16, 128, 96), new THREE.ShaderMaterial({
+    vertexShader: `varying vec3 vN; varying vec3 vV; void main(){ vec4 mv=modelViewMatrix*vec4(position,1.); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `varying vec3 vN; varying vec3 vV; void main(){ float d=dot(vN,vV); float i=pow(clamp(.62+d*1.0,0.,1.),5.)*1.1;
+      gl_FragColor=vec4(vec3(.22,.55,1.)*i,1.); }`,
+    side: THREE.BackSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  tiltG.add(atmo);
+
+  // land dots sampled from the real propagation map (web mercator) in capture 3
+  const mc = document.createElement("canvas"); mc.width = SW; mc.height = SH; const mg = mc.getContext("2d");
+  mg.drawImage(imgs[2], 0, 0); const md = mg.getImageData(0, 0, SW, SH).data;
+  const K = 667.6, X0 = 1206.4, Y0 = 3840.3;
+  const merc = (lat, lon) => [X0 + K * rad(lon), Y0 - K * Math.log(Math.tan(Math.PI / 4 + rad(lat) / 2))];
+  const isLand = (lat, lon) => {
+    const [px, py] = merc(lat, lon).map(Math.round);
+    if (px < 0 || px >= SW || py < 1930 || py >= 5120) return false;
+    const i = (py * SW + px) * 4, r = md[i], g = md[i + 1], b = md[i + 2], a = md[i + 3];
+    if (a < 200) return false;
+    if (Math.abs(r - 170) + Math.abs(g - 211) + Math.abs(b - 223) < 60) return false; // ocean
+    if (b > r + 80) return false; // blue FAB
+    return true;
+  };
+  const toV = (lat, lon, rr) => new THREE.Vector3(Math.cos(rad(lat)) * Math.sin(rad(lon)), Math.sin(rad(lat)), Math.cos(rad(lat)) * Math.cos(rad(lon))).multiplyScalar(rr);
+  const pts = [];
+  const step = 0.95;
+  for (let lat = -72; lat <= 82; lat += step) {
+    const n = Math.max(1, Math.round(360 * Math.cos(rad(lat)) / step));
+    for (let j = 0; j < n; j++) { const lon = -180 + (j + (Math.round(lat / step) % 2) * 0.5) * 360 / n; if (isLand(lat, lon)) pts.push(toV(lat, lon, R * 1.003)); }
+  }
+  const dg = new THREE.BufferGeometry().setFromPoints(pts);
+  spin.add(new THREE.Points(dg, new THREE.ShaderMaterial({
+    uniforms: { size: { value: 9.5 }, D: { value: D } },
+    vertexShader: `uniform float size, D; varying float vA;
+      void main(){ vec4 mv=modelViewMatrix*vec4(position,1.); vec3 n=normalize(normalMatrix*normalize(position));
+        float f=dot(n,normalize(-mv.xyz)); vA=smoothstep(.0,.45,f); gl_PointSize=size*D/(-mv.z); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `varying float vA; void main(){ float d=length(gl_PointCoord-.5); if(d>.5) discard;
+      float a=smoothstep(.5,.3,d)*vA; gl_FragColor=vec4(mix(vec3(.35,.6,1.),vec3(.8,.9,1.),vA)*a*.95,a); }`,
+    transparent: true, depthWrite: false })));
+
+  // server pins: positions of the 23 check marks on the real map (thumb coords of a 0.4119 downscale)
+  const checks = [[52, 648], [150, 600], [135, 615], [160, 628], [580, 495], [495, 558], [510, 580], [530, 590], [562, 548], [575, 580],
+    [498, 572], [548, 566], [605, 645], [650, 660], [750, 715], [830, 745], [965, 828], [975, 865], [285, 945], [520, 604], [590, 470], [120, 640], [470, 548]];
+  const inv = ([tx, ty]) => { const px = tx / 0.4119, py = 1800 + ty / 0.4119;
+    return [THREE.MathUtils.radToDeg(2 * Math.atan(Math.exp((Y0 - py) / K)) - Math.PI / 2), THREE.MathUtils.radToDeg((px - X0) / K)]; };
+  const pins = checks.map(inv);
+  const pinCore = radialTex([[0, "rgba(255,255,255,1)"], [0.3, "rgba(255,255,255,1)"], [0.36, "rgba(255,255,255,0)"], [1, "rgba(255,255,255,0)"]]);
+  for (const [lat, lon] of pins) {
+    const p = toV(lat, lon, R * 1.006);
+    const halo = sprite(glowTex, 0x34d399, 95, 0.9); halo.position.copy(p); spin.add(halo);
+    const core = sprite(pinCore, 0xd1fae5, 30, 1); core.position.copy(p); spin.add(core);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(24, 29, 48), new THREE.MeshBasicMaterial({ color: 0x34d399, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    ring.position.copy(p); ring.lookAt(p.clone().multiplyScalar(2)); spin.add(ring);
+  }
+  // arcs from a Frankfurt-ish hub to every other server
+  const hub = toV(pins[7][0], pins[7][1], R);
+  pins.forEach(([lat, lon], i) => {
+    if (i === 7) return;
+    const b = toV(lat, lon, R); const ang = hub.angleTo(b); if (ang < 0.06) return;
+    const mid = hub.clone().add(b).normalize().multiplyScalar(R * (1 + 0.22 * ang + 0.02));
+    const curve = new THREE.QuadraticBezierCurve3(hub.clone().multiplyScalar(1.004), mid, b.clone().multiplyScalar(1.004));
+    spin.add(glowTube(curve, 3.2, { power: 0.8, intensity: 0.9, pulses: 1.3, cols: ["#38bdf8", "#5eead4", "#34d399"], segs: 120 }));
+    spin.add(glowTube(curve, 14, { power: 2.5, intensity: 0.22, cols: ["#38bdf8", "#5eead4", "#34d399"], segs: 120 }));
+  });
+  place(root, G.sx, G.sy, G.z, [0, 0, 0], gScene);
+  const halo = sprite(glowTex, 0x1d4ed8, R * 3.2, 0.45); halo.position.z = -R * 1.2; root.add(halo);
+  root.updateMatrixWorld(true);
+  HUB = spin.localToWorld(hub.clone().multiplyScalar(1.01));
+  console.log("hub screen", HUB.x / k(HUB.z) + W / 2, H / 2 - HUB.y / k(HUB.z), HUB.z);
+}
+
+// --- devices ---
+const DEV_H = 1830;
+const d1 = place(device(imgs[0], DEV_H), 700, 1770, 0, [3, -16, 2.5]);
+const d2 = place(device(imgs[1], DEV_H), 1880, 1800, -120, [2, 12, -2.5]);
+const d3 = place(device(imgs[2], 1680), 3030, 1880, 80, [2, 17, 2]);
+
+// soft glows behind devices
+[[700, 1780, 0x2563eb], [1880, 1800, 0x0ea5e9], [3060, 1800, 0x14b8a6]].forEach(([x, y, c]) => place(sprite(glowTex, c, 1900, 0.35), x, y, -600));
+
+// --- lifted cards ---
+place(card(imgs[0], [110, 1402, 2318, 2776], 900), 560, 1560, 380, [4, -10, 1.5]);
+place(card(imgs[1], [110, 1470, 2318, 2365], 960), 1950, 1560, 360, [3, 9, -1.5]);
+place(card(imgs[2], [60, 1515, 2368, 1905], 900), 3105, 1565, 420, [5, 12, 1]);
+// all-domains stack (screen 4) from the list rows in capture 4 (drawer only)
+[0, 1, 2, 3, 4, 5].forEach((row, i) => {
+  const y0 = 718 + 395 * row;
+  place(card(imgs[3], [0, y0, 1320, y0 + 395], 760, 44, 0.7), 4470 + (i - 2.5) * 30, 920 + i * 282, 260 - i * 50, [8, -16, 0]);
+});
+
+// --- the signal cable: one continuous line through all four screens ---
+const cableA = cable([
+  [-250, 2050, -300], [250, 2420, -250], [650, 2440, -350], [950, 1500, -380], [1000, 1000, -350], [1150, 860, -300],
+  [1330, 810, -300], [1650, 740, -300], [2050, 720, -300], [2380, 790, -250], [2600, 1000, -300], [2850, 1150, -400], [3300, 1300, -350], HUB], { pulses: 6 });
+const cableB = cable([HUB, [3700, 1180, -150], [3950, 800, -250], [4500, 690, -250], [5000, 820, -250], [5120, 1300, -250],
+  [5000, 2200, -300], [4700, 2560, -200], [4200, 2650, -250], [3800, 2560, -300]], { pulses: 3, cols: ["#34d399", "#22d3ee", "#3b82f6"] });
+// data packets riding the cable
+[[cableA, [0.1, 0.27, 0.45, 0.62, 0.86]], [cableB, [0.2, 0.5, 0.78]]].forEach(([cv, ts]) => ts.forEach((t) => {
+  const p = cv.getPointAt(t); const s = sprite(glowTex, 0xa5f3fc, 150, 1); s.position.copy(p); scene.add(s);
+  const c = sprite(glowTex, 0xffffff, 46, 1); c.position.copy(p); scene.add(c);
+}));
+
+// ---------- render ----------
+await document.fonts.ready;
+renderer.clear();
+renderer.render(bgScene, bgCam);
+renderer.render(gScene, camera);
+renderer.clearDepth();
+renderer.render(scene, camera);
+requestAnimationFrame(() => { window.__ready = true; });
+</script>
+</body></html>
