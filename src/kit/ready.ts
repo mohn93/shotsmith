@@ -9,13 +9,22 @@ const sameDocument = (u: string): boolean => {
   catch { return false; }
 };
 
-function cssImageUrls(): string[] {
-  const urls = new Set<string>();
+// The id a same-document url(#id) names; Chromium hides an element whose mask names no element.
+const fragmentId = (u: string): string => {
+  const hash = u.startsWith("#") ? u : new URL(u, location.href).hash;
+  try { return decodeURIComponent(hash.slice(1)); } catch { return hash.slice(1); }
+};
+
+function cssImageUrls(): { urls: string[]; missing: string[] } {
+  const urls = new Set<string>(), missing = new Set<string>();
   for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
     const cs = getComputedStyle(el);
-    for (const p of ["background-image", "mask-image", "-webkit-mask-image"]) for (const u of cssUrls(cs.getPropertyValue(p))) if (!sameDocument(u)) urls.add(u);
+    for (const p of ["background-image", "mask-image", "-webkit-mask-image"]) for (const u of cssUrls(cs.getPropertyValue(p))) {
+      if (!sameDocument(u)) urls.add(u);
+      else if (!document.getElementById(fragmentId(u))) missing.add(`url(#${fragmentId(u)})`);
+    }
   }
-  return [...urls];
+  return { urls: [...urls], missing: [...missing] };
 }
 
 function shortUrl(u: string): string {
@@ -32,7 +41,9 @@ async function settle(): Promise<void> {
   // Images with a source (src, srcset or a <picture> source) must have loaded; one with none shows its alt text.
   const imgs = Array.from(document.images).filter((i) => i.getAttribute("src") || i.getAttribute("srcset") || i.parentElement?.localName === "picture");
   await Promise.all(imgs.map((i) => i.decode().catch(() => { failed.push(shortUrl(i.getAttribute("src") || i.currentSrc || "an image in a <picture>")); })));
-  await Promise.all(cssImageUrls().map((u) => { const i = new Image(); i.src = u; return i.decode().catch(() => { failed.push(shortUrl(u)); }); }));
+  const css = cssImageUrls();
+  if (css.missing.length) throw new Error(`Missing element for ${css.missing.join(", ")}`);
+  await Promise.all(css.urls.map((u) => { const i = new Image(); i.src = u; return i.decode().catch(() => { failed.push(shortUrl(u)); }); }));
   if (failed.length) throw new Error(`Image failed to load: ${[...new Set(failed)].join(", ")}`);
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 }

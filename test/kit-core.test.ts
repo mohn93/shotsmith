@@ -101,6 +101,27 @@ describe("kit core", () => {
     expect(sidecar.warnings).toEqual([]);
   });
 
+  it("fails the render when a same-document url(#id) names no element", async () => {
+    const ws = tmpWorkspace("kit");
+    fs.writeFileSync(`${ws}/pages/mask-typo.html`, `<!doctype html><body><script type="module">
+      import { stage, ready } from "shotsmith/kit";
+      const s = await stage();
+      const d = document.createElement("div");
+      d.style.cssText = "width:100px;height:100px;background:#33c;mask-image:url(#nope);-webkit-mask-image:url(#nope)";
+      s.root.appendChild(d);
+      await ready();</script></body>`);
+    await expect(render(ws, "mask-typo", "android-phone", "en")).rejects.toThrow(/Missing element for url\(#nope\)/);
+  });
+
+  it("names the font file when a font cannot be decoded", async () => {
+    const ws = tmpWorkspace("kit");
+    fs.writeFileSync(`${ws}/fonts/Broken.ttf`, "<html>not a font</html>");
+    const cfg = JSON.parse(fs.readFileSync(`${ws}/shotsmith.config.json`, "utf8"));
+    cfg.fonts.text = { apple: "fonts/Broken.ttf", play: "fonts/Broken.ttf" };
+    fs.writeFileSync(`${ws}/shotsmith.config.json`, JSON.stringify(cfg));
+    await expect(render(ws, "texts", "android-phone", "en")).rejects.toThrow(/Font "[^"]+" \(\/fonts\/Broken\.ttf\) could not be decoded \(corrupt or unsupported format\)/);
+  });
+
   it("still fails the render when a CSS mask image does not load", async () => {
     const ws = tmpWorkspace("kit");
     fs.writeFileSync(`${ws}/pages/mask-missing.html`, `<!doctype html><body><script type="module">

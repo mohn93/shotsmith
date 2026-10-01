@@ -29,6 +29,7 @@ export function installSkill(o: { dir?: string; force?: boolean } = {}): { path:
   let setAside = false;
   try {
     fs.cpSync(skillDir(), staged, { recursive: true });
+    fs.chmodSync(staged, 0o755); // mkdtemp creates it 0700
     if (st) { fs.renameSync(dest, backup); setAside = true; }
     fs.renameSync(staged, dest);
   } catch (e) {

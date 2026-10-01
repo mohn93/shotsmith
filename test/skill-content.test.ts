@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ROOT } from "./helpers.js";
+import { ROOT, tempDir } from "./helpers.js";
 
 const SKILL = path.join(ROOT, "skills/store-screenshots");
 const read = (f: string) => fs.readFileSync(path.join(SKILL, f), "utf8");
@@ -41,7 +41,36 @@ describe("skill content", () => {
 
   it("holds kit.md and the example sources in sync with their sources", () => {
     const r = spawnSync("node", ["scripts/sync-skill.mjs", "--check"], { cwd: ROOT, encoding: "utf8" });
-    expect(r.stdout).toBe("");
-    expect(r.status).toBe(0);
+    expect(r.stdout, "the skill copies are out of date: run npm run sync-skill").toBe("");
+    expect(r.status, "the skill copies are out of date: run npm run sync-skill").toBe(0);
+  });
+
+  it("ships no example package.json (those run the repo's CLI)", () => {
+    expect(walk(path.join(SKILL, "reference/examples")).filter((f) => path.basename(f) === "package.json")).toEqual([]);
+  });
+
+  it("removes empty folders left by a removed example and reports them in --check", () => {
+    const dir = tempDir("sync-");
+    fs.mkdirSync(path.join(dir, "scripts"));
+    fs.copyFileSync(path.join(ROOT, "scripts/sync-skill.mjs"), path.join(dir, "scripts/sync-skill.mjs"));
+    fs.mkdirSync(path.join(dir, "docs"));
+    fs.writeFileSync(path.join(dir, "docs/kit.md"), "kit");
+    fs.mkdirSync(path.join(dir, "examples/app/pages"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "examples/app/pages/01.html"), "page");
+    const sync = (...a: string[]) => spawnSync("node", ["scripts/sync-skill.mjs", ...a], { cwd: dir, encoding: "utf8" });
+    expect(sync().status).toBe(0);
+    expect(sync("--check").stdout).toBe("");
+
+    const gone = path.join(dir, "skills/store-screenshots/reference/examples/gone/pages");
+    fs.mkdirSync(gone, { recursive: true });
+    const check = sync("--check");
+    expect(check.stdout.trim()).toBe("skills/store-screenshots/reference/examples/gone/pages/");
+    expect(check.status).toBe(1);
+
+    fs.writeFileSync(path.join(gone, "02.html"), "stale");
+    expect(sync().status).toBe(0);
+    expect(fs.existsSync(path.join(dir, "skills/store-screenshots/reference/examples/gone"))).toBe(false);
+    expect(fs.existsSync(path.join(dir, "skills/store-screenshots/reference/examples/app/pages/01.html"))).toBe(true);
+    expect(sync("--check").stdout).toBe("");
   });
 });

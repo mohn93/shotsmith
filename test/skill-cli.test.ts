@@ -20,6 +20,7 @@ describe("skill command", () => {
     expect(JSON.parse(run(["skill", "install", "--dir", home, "--json"]).stdout)).toEqual({ ok: true, path: dest, replaced: false });
     expect(fs.readFileSync(path.join(dest, "SKILL.md"), "utf8")).toBe(fs.readFileSync(path.join(SKILL, "SKILL.md"), "utf8"));
     expect(fs.existsSync(path.join(dest, "reference/README.md"))).toBe(true);
+    expect(fs.statSync(dest).mode & 0o777).toBe(0o755);
 
     fs.writeFileSync(path.join(dest, "stale.txt"), "x");
     fs.mkdirSync(path.join(home, ".store-screenshots-abc123"));
@@ -60,5 +61,6 @@ describe("skill command", () => {
     const files = JSON.parse(r.stdout)[0].files.map((f: { path: string }) => f.path);
     expect(files).toContain("skills/store-screenshots/SKILL.md");
     expect(files).toContain("skills/store-screenshots/kit.md");
+    expect(files.filter((f: string) => /^(examples|\.superpowers|test|scripts)\//.test(f))).toEqual([]);
   });
 });

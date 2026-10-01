@@ -17,7 +17,10 @@ function fontCss(c: KitContext): string {
 
 async function loadFonts(c: KitContext): Promise<void> {
   for (const f of Object.values(c.fonts)) for (const face of f.faces) {
-    const loaded = await document.fonts.load(`${face.weight.split(" ")[0]} 40px "${f.family}"`);
+    // A file the browser cannot decode (an HTML error page saved as .ttf, a truncated download) rejects with a bare NetworkError.
+    const loaded = await document.fonts.load(`${face.weight.split(" ")[0]} 40px "${f.family}"`).catch(() => {
+      throw new Error(`Font "${f.family}" (${face.url}) could not be decoded (corrupt or unsupported format)`);
+    });
     if (!loaded.length) throw new Error(`Font "${f.family}" (${face.url}) failed to load`);
   }
 }

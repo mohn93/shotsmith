@@ -1,7 +1,0 @@
-{
-  "name": "shotsmith-example-elsewhere",
-  "private": true,
-  "type": "module",
-  "scripts": { "build": "node ../../dist/cli.js build" },
-  "dependencies": { "three": "0.186.1" }
-}

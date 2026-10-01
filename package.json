@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "App Store and Google Play screenshots, written as code by an AI agent and checked against store rules",
   "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/mohn93/shotsmith.git" },
   "type": "module",
   "bin": { "shotsmith": "./dist/cli.js" },
   "exports": {
@@ -17,7 +18,8 @@
     "lint": "tsc --noEmit",
     "test": "npm run build && vitest run",
     "prepack": "npm run build",
-    "examples": "npm run build && node scripts/build-examples.mjs"
+    "examples": "npm run build && node scripts/build-examples.mjs",
+    "sync-skill": "node scripts/sync-skill.mjs"
   },
   "dependencies": {
     "commander": "^14.0.3",
