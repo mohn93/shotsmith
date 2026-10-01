@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BUILT_IN_TARGETS } from "../src/config/targets.js";
 import { localSets, slotsFor } from "../src/upload/local.js";
 import { type PlannedSet, describePlan, describeReport, makePlan, planPath, readPlan, samePlan, writeJson } from "../src/upload/plan.js";
@@ -66,6 +66,29 @@ describe("localSets", () => {
     ]));
   });
 
+  it("keeps only the chosen locales' export findings", async () => {
+    const cfg = await uploadWorkspace();
+    fs.rmSync(path.join(cfg.root, "export/de/iphone-6.9/02-b.jpg"));
+    expect((await localSets(cfg, "apple", { locales: ["en"] })).problems).toEqual([]);
+    expect((await localSets(cfg, "apple", { locales: ["de"] })).problems).toEqual([expect.stringMatching(/store\.missing \(de\/iphone-6\.9\/02-b\)/)]);
+    fs.rmSync(path.join(cfg.root, "export/en/iphone-6.9/01-a.jpg"));
+    expect((await localSets(cfg, "apple", { locales: ["en"] })).problems).toEqual([expect.stringMatching(/store\.missing \(en\/iphone-6\.9\/01-a\)/)]);
+  });
+
+  it("gives both tablet slots of a locale the same files", async () => {
+    const cfg = await uploadWorkspace({ targets: ["android-tablet"] });
+    const { sets } = await localSets(cfg, "play");
+    expect(sets.map((s) => [s.locale, s.slot])).toEqual([["en", "sevenInchScreenshots"], ["en", "tenInchScreenshots"], ["de", "sevenInchScreenshots"], ["de", "tenInchScreenshots"]]);
+    expect(sets[1].files).toBe(sets[0].files);
+    expect(sets[3].files).toBe(sets[2].files);
+    expect(sets[2].files).not.toBe(sets[0].files);
+  });
+
+  it("reports two Android phone targets that fill the same slot", async () => {
+    const cfg = await uploadWorkspace({ export: false, targets: ["android-phone", { name: "pixel", w: 1080, h: 2400, platform: "android-phone" }] });
+    expect((await localSets(cfg, "play")).problems).toEqual(expect.arrayContaining([expect.stringMatching(/Targets "android-phone" and "pixel" both fill phoneScreenshots; keep one of them/)]));
+  });
+
   it("needs targets for the store", async () => {
     const cfg = await uploadWorkspace({ targets: ["android-phone"] });
     await expect(localSets(cfg, "apple")).rejects.toThrow(/no App Store targets/);
@@ -91,6 +114,22 @@ describe("plans", () => {
     expect(makePlan({ ...base, version: "1.2", sets: [set()] }).digest).not.toBe(a.digest);
   });
 
+  it("digests a change to the order, the uploads, the kept files, the status or the problems", () => {
+    const digest = (o: Partial<PlannedSet> = {}, problems: string[] = []) => makePlan({ ...base, problems, sets: [set(o)] }).digest;
+    const same = digest();
+    const changed = [
+      digest({ order: ["export/en/iphone-6.9/02-b.jpg", "export/en/iphone-6.9/01-a.jpg"] }),
+      digest({ upload: [{ file: "export/en/iphone-6.9/02-b.jpg", checksum: "other" }] }),
+      digest({ upload: [] }),
+      digest({ keep: [{ id: "1", file: "export/en/iphone-6.9/02-b.jpg" }] }),
+      digest({ keep: [] }),
+      digest({ status: "unchanged" }),
+      digest({}, ["a problem"]),
+      digest({ remove: [{ id: "2", checksum: "old", reason: "failed" }] }),
+    ];
+    expect(new Set([same, ...changed]).size).toBe(changed.length + 1);
+  });
+
   it("writes, reads and compares saved plans", async () => {
     const cfg = await uploadWorkspace({ export: false });
     const plan = makePlan({ ...base, sets: [set()] });
@@ -104,6 +143,42 @@ describe("plans", () => {
     expect(readPlan(cfg, "play")).toBeNull();
   });
 
+  it("reads only a saved plan that has every field", async () => {
+    const cfg = await uploadWorkspace({ export: false });
+    const plan = makePlan({ ...base, sets: [set()] });
+    const save = (p: unknown) => { fs.mkdirSync(path.join(cfg.root, "export"), { recursive: true }); fs.writeFileSync(planPath(cfg, "apple"), JSON.stringify(p)); };
+    save(plan);
+    expect(readPlan(cfg, "apple")).toEqual(plan);
+    save({ ...plan, version: null });
+    expect(readPlan(cfg, "apple")?.version).toBeNull();
+    const { sets: _sets, ...noSets } = plan;
+    for (const bad of [noSets, { ...plan, problems: "x" }, { ...plan, app: 1 }, { ...plan, createdAt: undefined }, { ...plan, version: 1 }, { ...plan, store: "play" }]) {
+      save(bad);
+      expect(readPlan(cfg, "apple")).toBeNull();
+    }
+  });
+
+  it("writes through a temp file in the same folder and leaves none behind", async () => {
+    const cfg = await uploadWorkspace({ export: false });
+    const file = planPath(cfg, "apple");
+    const rename = vi.spyOn(fs, "renameSync");
+    try {
+      writeJson(cfg, file, { a: 1 });
+      expect(rename).toHaveBeenCalledTimes(1);
+      const [from, to] = rename.mock.calls[0] as [string, string];
+      expect(to).toBe(file);
+      expect(path.dirname(from)).toBe(path.dirname(file));
+      expect(from).not.toBe(file);
+      expect(fs.readdirSync(path.dirname(file))).toEqual(["upload-plan-apple.json"]);
+      rename.mockImplementation(() => { throw new Error("disk full"); });
+      expect(() => writeJson(cfg, file, { a: 2 })).toThrow(/disk full/);
+    } finally {
+      rename.mockRestore();
+    }
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ a: 1 });
+    expect(fs.readdirSync(path.dirname(file))).toEqual(["upload-plan-apple.json"]);
+  });
+
   it("does not write through a linked output folder", async () => {
     const cfg = await uploadWorkspace({ export: false });
     const elsewhere = tempDir("elsewhere-");
@@ -113,14 +188,14 @@ describe("plans", () => {
   });
 
   it("describes a plan and a report", () => {
-    const named = set({ storeLocale: "fr-FR", remove: [{ id: "5", checksum: "x", reason: "superseded", fileName: "old-01.jpg" }, { id: "6", checksum: null, reason: "failed", fileName: null }, { id: "7", checksum: "y", reason: "duplicate", fileName: "old-02.jpg" }] });
+    const named = set({ storeLocale: "fr-FR", remove: [{ id: "5", checksum: "x", reason: "superseded", fileName: "old-01.jpg" }, { id: "6", checksum: null, reason: "failed", fileName: null }, { id: "7", checksum: "y", reason: "duplicate", fileName: "old-02.jpg" }, { id: "8", checksum: null, reason: "unfinished", fileName: null }] });
     const plan = makePlan({ ...base, sets: [set(), set({ storeLocale: "de-DE", status: "unchanged", remove: [], upload: [] }), named], problems: ["something"] });
     expect(describePlan(plan)).toEqual([
       "App Store Connect plan for com.example.demo, version 1.1",
       "en-US iphone-6.9 (APP_IPHONE_67): keep 1, delete 1 (1 superseded), upload 1",
       "  order: 01-a.jpg, 02-b.jpg",
       "de-DE iphone-6.9 (APP_IPHONE_67): unchanged",
-      "fr-FR iphone-6.9 (APP_IPHONE_67): keep 1, delete 3 (1 superseded, 1 failed, 1 duplicate), upload 1",
+      "fr-FR iphone-6.9 (APP_IPHONE_67): keep 1, delete 4 (1 superseded, 1 failed, 1 unfinished, 1 duplicate), upload 1",
       "  delete: old-01.jpg, old-02.jpg",
       "  order: 01-a.jpg, 02-b.jpg",
       "problem: something",
@@ -129,11 +204,11 @@ describe("plans", () => {
     expect(describeReport({
       store: "apple", app: "a", version: "1.1", digest: "d", editId: null, editExpiresAt: null, startedAt: "", finishedAt: "", ok: true, error: null,
       sets: [
-        { ...head, status: "changed", deleted: ["2"], uploaded: [{ file: "f", id: "3" }], order: [{ file: "e", id: "1", checksum: "x" }, { file: "f", id: "3", checksum: "y" }] },
-        { ...head, storeLocale: "de-DE", status: "unchanged", deleted: [], uploaded: [], order: [] },
-        { ...head, storeLocale: "fr-FR", status: "failed", deleted: ["9"], uploaded: [{ file: "f", id: "3" }, { file: "g", id: "4" }], order: [] },
-        { ...head, storeLocale: "es-ES", status: "discarded", deleted: [], uploaded: [{ file: "f", id: "5" }], order: [] },
+        { ...head, status: "changed", changedStore: true, deleted: ["2"], uploaded: [{ file: "f", id: "3" }], order: [{ file: "e", id: "1", checksum: "x" }, { file: "f", id: "3", checksum: "y" }] },
+        { ...head, storeLocale: "de-DE", status: "unchanged", changedStore: false, deleted: [], uploaded: [], order: [] },
+        { ...head, storeLocale: "fr-FR", status: "failed", changedStore: true, deleted: ["9"], uploaded: [{ file: "f", id: "3" }, { file: "g", id: "4" }], order: [] },
+        { ...head, storeLocale: "es-ES", status: "discarded", changedStore: true, deleted: [], uploaded: [{ file: "f", id: "5" }], order: [] },
       ],
-    })).toEqual(["en-US iphone-6.9 (APP_IPHONE_67): deleted 1, uploaded 1, 2 in order and verified", "de-DE iphone-6.9 (APP_IPHONE_67): unchanged", "fr-FR iphone-6.9 (APP_IPHONE_67): failed after deleting 1 and uploading 2", "es-ES iphone-6.9 (APP_IPHONE_67): discarded with the draft edit (listing unchanged)"]);
+    })).toEqual(["en-US iphone-6.9 (APP_IPHONE_67): deleted 1, uploaded 1, 2 in order and verified", "de-DE iphone-6.9 (APP_IPHONE_67): unchanged", "fr-FR iphone-6.9 (APP_IPHONE_67): failed after deleting 1 and uploading 2", "es-ES iphone-6.9 (APP_IPHONE_67): not applied; the Google Play listing is unchanged"]);
   });
 });

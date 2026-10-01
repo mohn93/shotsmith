@@ -79,7 +79,7 @@ describe("skill content", () => {
     for (const s of ["upload apple", "upload play", "--apply", "--commit"]) expect(skill, s).toContain(s);
     expect(skill).toMatch(/[Nn]ever submit/);
     expect(skill).not.toContain("lists an `upload` command");
-    for (const s of ["SHOTSMITH_ASC_ISSUER_ID", "SHOTSMITH_ASC_KEY_ID", "SHOTSMITH_ASC_KEY_PATH", "SHOTSMITH_PLAY_KEY_PATH", "credentials.json", "--app-version", "upload-plan-", "upload-report-apple.json", "upload-report-play.json"]) {
+    for (const s of ["SHOTSMITH_ASC_ISSUER_ID", "SHOTSMITH_ASC_KEY_ID", "SHOTSMITH_ASC_KEY_PATH", "SHOTSMITH_PLAY_KEY_PATH", "credentials.json", "--app-version", "--changes-not-sent-for-review", "upload-plan-", "upload-report-apple.json", "upload-report-play.json"]) {
       expect(targets, s).toContain(s);
     }
     expect(targets).not.toMatch(/upload apple[^\n]*--version/);

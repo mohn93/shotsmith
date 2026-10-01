@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { type AppleDeps, type RemoteShot, planApple, planAppleSet } from "../src/upload/apple.js";
+import { type AppleDeps, AscClient, type RemoteShot, planApple, planAppleSet } from "../src/upload/apple.js";
 import { type LocalSet, localSets } from "../src/upload/local.js";
+import type { HttpResponse } from "../src/upload/http.js";
 import { FakeAsc } from "./upload/fake-asc.js";
 import { uploadWorkspace } from "./upload/workspace.js";
 
@@ -40,6 +41,12 @@ describe("planAppleSet", () => {
       { id: "5", checksum: "c", reason: "processing", fileName: "5.jpg" },
     ]);
     expect(s.upload.map((u) => u.checksum)).toEqual(["b", "c"]);
+  });
+
+  it("calls a reservation that never finished uploading unfinished, and a stuck one processing", () => {
+    const s = planAppleSet(local(["a"]), [remote("1", "a", "AWAITING_UPLOAD"), remote("2", null, "AWAITING_UPLOAD"), remote("3", "a", "UPLOAD_COMPLETE")]);
+    expect(s.remove.map((r) => [r.id, r.reason])).toEqual([["1", "unfinished"], ["2", "unfinished"], ["3", "processing"]]);
+    expect(s.upload.map((u) => u.checksum)).toEqual(["a"]);
   });
 
   it("needs one remote screenshot per page when two pages are identical", () => {
@@ -104,6 +111,49 @@ describe("planApple", () => {
     const { plan } = await planApple(cfg, sets, {}, deps(fake));
     expect(plan.version).toBe("1.1");
     expect(plan.sets).toHaveLength(2);
+  });
+
+  // The version list as App Store Connect shows it, with the state under only the attributes `keep` names.
+  const withStates = (fake: FakeAsc, keep: ("appVersionState" | "appStoreState")[]): AppleDeps => ({
+    ...deps(fake),
+    transport: async (req) => {
+      const r = await fake.transport(req);
+      if (!/\/appStoreVersions\?/.test(req.url)) return r;
+      const body = JSON.parse(r.text);
+      for (const v of body.data) for (const k of ["appVersionState", "appStoreState"] as const) if (!keep.includes(k)) delete v.attributes[k];
+      return { ...r, text: JSON.stringify(body) };
+    },
+  });
+
+  it("reads a version's state from appVersionState, or from appStoreState when that is missing", async () => {
+    const { cfg, sets, fake } = await setup();
+    for (const keep of [["appVersionState"], ["appStoreState"], ["appVersionState", "appStoreState"]] as const) {
+      expect((await planApple(cfg, sets, {}, withStates(fake, [...keep]))).plan.version, keep.join()).toBe("1.1");
+    }
+    fake.versions[0].state = "READY_FOR_DISTRIBUTION";
+    for (const keep of [["appVersionState"], ["appStoreState"]] as const) {
+      await expect(planApple(cfg, sets, {}, withStates(fake, [...keep])), keep.join()).rejects.toThrow(/No editable App Store version.*1\.1 \(READY_FOR_DISTRIBUTION\)/s);
+    }
+  });
+
+  it("follows links.next only within the API", async () => {
+    const answer = (next: string) => {
+      const calls: string[] = [];
+      const transport: AppleDeps["transport"] = async (req) => {
+        calls.push(req.url);
+        const body = req.url.endsWith("limit=1") ? { data: [], links: { next } } : { data: [] };
+        return { status: 200, text: JSON.stringify(body) } satisfies HttpResponse;
+      };
+      return { calls, client: new AscClient({ transport, token: () => "token" }) };
+    };
+    for (const next of ["https://evil.example/v1/apps?cursor=1", "https://api.appstoreconnect.apple.com.evil.example/v1/apps", "http://api.appstoreconnect.apple.com/v1/apps", "https://api.appstoreconnect.apple.comx/v1/apps"]) {
+      const t = answer(next);
+      await expect(t.client.all("/v1/apps?limit=1"), next).rejects.toThrow(/App Store Connect pointed to .*; Shotsmith only calls https:\/\/api\.appstoreconnect\.apple\.com/);
+      expect(t.calls, next).toHaveLength(1);
+    }
+    const ok = answer("https://api.appstoreconnect.apple.com/v1/apps?cursor=2");
+    await expect(ok.client.all("/v1/apps?limit=1")).resolves.toEqual([]);
+    expect(ok.calls).toEqual(["https://api.appstoreconnect.apple.com/v1/apps?limit=1", "https://api.appstoreconnect.apple.com/v1/apps?cursor=2"]);
   });
 
   it("explains a rejected key and an unknown app", async () => {

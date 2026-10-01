@@ -25,6 +25,10 @@ export class FakePlay {
   failValidate = false;
   // DELETE of an edit answers 500 and leaves the edit in place.
   failDeleteEdit = false;
+  // An upload answers 200 without an image id.
+  noImageId = false;
+  // :commit without changesNotSentForReview=true answers 400, as Google does when it cannot send changes for review.
+  needsManualReview = false;
   // Every request answers 401 with Google's "insufficient permissions" text.
   insufficient401 = false;
   // Listing GETs inside an edit leave out the last image.
@@ -70,6 +74,9 @@ export class FakePlay {
     if (action === "validate" && this.failValidate) return fail(400, "Validation failed");
     if (action === "validate") return reply(200, { id: editId });
     if (action === "commit") {
+      if (this.needsManualReview && url.searchParams.get("changesNotSentForReview") !== "true") {
+        return fail(400, "Changes cannot be sent for review automatically. Please set the query parameter changesNotSentForReview to true. Once committed, the changes in this edit can be sent for review from the Google Play Console UI.");
+      }
       this.live = edit;
       this.edits.delete(editId);
       return reply(200, { id: editId });
@@ -90,7 +97,8 @@ export class FakePlay {
       const bytes = Buffer.from(req.body as Uint8Array);
       const img = { id: `img${++this.imageN}`, sha256: this.corruptUploads ? "0".repeat(64) : hash("sha256", bytes), sha1: hash("sha1", bytes) };
       slots.set(slot, [...images, img]);
-      return reply(200, { image: { ...img, url: `https://play-lh.example/${img.id}` } });
+      const shown = this.noImageId ? { sha256: img.sha256 } : { ...img, url: `https://play-lh.example/${img.id}` };
+      return reply(200, { image: shown });
     }
     if (req.method === "GET") {
       const shown = this.dropLastImage ? images.slice(0, -1) : images;

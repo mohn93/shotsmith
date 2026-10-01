@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { EDITABLE } from "../../src/upload/apple.js";
 import type { HttpRequest, HttpResponse, Transport } from "../../src/upload/http.js";
 
 export const API = "https://api.appstoreconnect.apple.com";
@@ -30,6 +31,8 @@ export class FakeAsc {
   status401 = false;
   // The relationship PATCH that orders a set answers 204 but leaves the order as it was.
   ignoreReorder = false;
+  // DELETE of a screenshot answers 500 and leaves the screenshot in place.
+  failDelete = false;
   private n = 0;
 
   // Puts screenshots into a set as if uploaded earlier. The state defaults to COMPLETE.
@@ -68,9 +71,27 @@ export class FakeAsc {
     return this.api(req.method, url, typeof req.body === "string" ? JSON.parse(req.body) : undefined);
   };
 
+  // The version a write touches: its set or screenshot, or the localization a new set goes into.
+  private versionOf(p: string, body: Json | undefined): { state: string } | undefined {
+    let localizationId: string | undefined;
+    let setId: string | undefined;
+    let m: RegExpMatchArray | null;
+    if (p === "/v1/appScreenshotSets") localizationId = body?.data?.relationships?.appStoreVersionLocalization?.data?.id;
+    else if (p === "/v1/appScreenshots") setId = body?.data?.relationships?.appScreenshotSet?.data?.id;
+    else if ((m = p.match(/^\/v1\/appScreenshotSets\/([^/]+)\/relationships\/appScreenshots$/))) setId = m[1];
+    else if ((m = p.match(/^\/v1\/appScreenshots\/([^/]+)$/))) setId = this.shots.get(m[1])?.setId;
+    if (setId) localizationId = this.sets.find((s) => s.id === setId)?.localizationId;
+    const loc = this.localizations.find((l) => l.id === localizationId);
+    return this.versions.find((v) => v.id === loc?.versionId);
+  }
+
   private api(method: string, url: URL, body: Json | undefined): HttpResponse {
     const p = url.pathname;
     let m: RegExpMatchArray | null;
+    if (method !== "GET") {
+      const version = this.versionOf(p, body);
+      if (version && !EDITABLE.includes(version.state)) return entityError(`The version is ${version.state}, so its screenshots cannot be changed`);
+    }
     if (method === "GET" && p === "/v1/apps") {
       return this.list(url, this.apps.filter((a) => a.bundleId === url.searchParams.get("filter[bundleId]")).map((a) => ({ type: "apps", id: a.id, attributes: { bundleId: a.bundleId, name: "Demo" } })));
     }
@@ -133,6 +154,7 @@ export class FakeAsc {
         return reply(200, { data: this.shotJson(shot) });
       }
       if (method === "DELETE") {
+        if (this.failDelete) return fail(500, "Backend error");
         const set = this.sets.find((s) => s.id === shot.setId)!;
         set.shots = set.shots.filter((id) => id !== shot.id);
         this.shots.delete(shot.id);

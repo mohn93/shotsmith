@@ -1,17 +1,14 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
 import { formatFinding } from "../checks/findings.js";
 import { checkExports, exportPath } from "../checks/store.js";
 import type { LocaleConfig, ResolvedConfig } from "../config/schema.js";
 import type { Target } from "../config/targets.js";
+import { STORE_NAME, md5, rel, sha256 } from "./util.js";
 
 export type Store = "apple" | "play";
 export interface LocalFile { page: string; file: string; rel: string; bytes: number; md5: string; sha256: string }
 // One store slot for one locale. An Android tablet target fills two slots with the same files.
 export interface LocalSet { locale: string; storeLocale: string; target: string; slot: string; files: LocalFile[] }
-
-const STORE_NAME: Record<Store, string> = { apple: "App Store", play: "Google Play" };
 
 // App Store display types by portrait size. Landscape is the same pair swapped.
 const APPLE_DISPLAY: [Target["platform"], number, number, string][] = [
@@ -28,8 +25,6 @@ export function slotsFor(t: Target): string[] {
 }
 
 export const storeLocale = (l: LocaleConfig, store: Store): string => (store === "apple" ? l.apple : l.play) ?? l.code;
-
-const hash = (alg: string, b: Buffer) => crypto.createHash(alg).update(b).digest("hex");
 
 // The exports to upload to one store, one set per locale and slot, in page order. When anything is wrong the
 // problems are returned and no sets: only an export that passes every store check is uploaded.
@@ -70,7 +65,7 @@ export async function localSets(cfg: ResolvedConfig, store: Store, o: { locales?
     const files = cfg.pages.map((page): LocalFile => {
       const file = exportPath(cfg, l.code, t.name, page);
       const bytes = fs.readFileSync(file);
-      return { page, file, rel: path.relative(cfg.root, file).split(path.sep).join("/"), bytes: bytes.length, md5: hash("md5", bytes), sha256: hash("sha256", bytes) };
+      return { page, file, rel: rel(cfg, file), bytes: bytes.length, md5: md5(bytes), sha256: sha256(bytes) };
     });
     for (const slot of slotsFor(t)) sets.push({ locale: l.code, storeLocale: storeLocale(l, store), target: t.name, slot, files });
   }

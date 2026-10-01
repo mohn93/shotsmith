@@ -32,12 +32,13 @@ function fromFile(p: string, home: string): string {
   return path.resolve(path.dirname(credentialsPath(home)), p);
 }
 
-// Each field comes from the environment first, then from credentials.json.
+// Each field comes from the environment first, then from credentials.json, which is read only when a field needs it.
 export function appleCredentials(env: NodeJS.ProcessEnv = process.env, home = os.homedir()): AppleCredentials {
-  const f = readCredentialsFile(home).apple ?? {};
-  const issuerId = env.SHOTSMITH_ASC_ISSUER_ID || f.issuerId;
-  const keyId = env.SHOTSMITH_ASC_KEY_ID || f.keyId;
-  const keyPath = env.SHOTSMITH_ASC_KEY_PATH ? path.resolve(env.SHOTSMITH_ASC_KEY_PATH) : f.keyPath ? fromFile(f.keyPath, home) : undefined;
+  let file: CredentialsFile | undefined;
+  const f = () => (file ??= readCredentialsFile(home)).apple ?? {};
+  const issuerId = env.SHOTSMITH_ASC_ISSUER_ID || f().issuerId;
+  const keyId = env.SHOTSMITH_ASC_KEY_ID || f().keyId;
+  const keyPath = env.SHOTSMITH_ASC_KEY_PATH ? path.resolve(env.SHOTSMITH_ASC_KEY_PATH) : fileKeyPath(f().keyPath, home);
   if (!issuerId || !keyId || !keyPath) {
     throw new Error(`App Store Connect credentials are missing. Set SHOTSMITH_ASC_ISSUER_ID, SHOTSMITH_ASC_KEY_ID and SHOTSMITH_ASC_KEY_PATH, or add "apple": { "issuerId", "keyId", "keyPath" } to ${credentialsPath(home)}`);
   }
@@ -45,11 +46,12 @@ export function appleCredentials(env: NodeJS.ProcessEnv = process.env, home = os
 }
 
 export function playCredentials(env: NodeJS.ProcessEnv = process.env, home = os.homedir()): PlayCredentials {
-  const f = readCredentialsFile(home).play ?? {};
-  const keyPath = env.SHOTSMITH_PLAY_KEY_PATH ? path.resolve(env.SHOTSMITH_PLAY_KEY_PATH) : f.keyPath ? fromFile(f.keyPath, home) : undefined;
+  const keyPath = env.SHOTSMITH_PLAY_KEY_PATH ? path.resolve(env.SHOTSMITH_PLAY_KEY_PATH) : fileKeyPath(readCredentialsFile(home).play?.keyPath, home);
   if (!keyPath) throw new Error(`Google Play credentials are missing. Set SHOTSMITH_PLAY_KEY_PATH to a service account JSON key, or add "play": { "keyPath" } to ${credentialsPath(home)}`);
   return { keyPath };
 }
+
+const fileKeyPath = (p: string | undefined, home: string): string | undefined => (p ? fromFile(p, home) : undefined);
 
 // The folder of the git working tree that holds p, or null.
 export function gitWorkTree(p: string): string | null {
@@ -59,19 +61,24 @@ export function gitWorkTree(p: string): string | null {
   }
 }
 
+const realOrNull = (p: string): string | null => { try { return fs.realpathSync.native(p); } catch { return null; } };
+
 const within = (p: string, dir: string): boolean => {
   const r = path.relative(dir, p);
-  return r === "" || (!r.startsWith("..") && !path.isAbsolute(r));
+  return r === "" || (r !== ".." && !r.startsWith(`..${path.sep}`) && !path.isAbsolute(r));
 };
 
 // Store keys are read only from outside the workspace and outside any git working tree, where they could be committed.
 // The check uses the native real path, so neither a link nor a different letter case (case-insensitive volumes) can hide where the key is.
-export function readKey(keyPath: string, workspace: string): string {
+export function readKey(keyPath: string, workspace: string, home = os.homedir()): string {
   let real: string;
   try { real = fs.realpathSync.native(keyPath); } catch { throw new Error(`Key file ${keyPath} does not exist`); }
   const move = "Move it outside any repository, for example to ~/.config/shotsmith/, and point the credentials at it";
-  if (within(real, fs.realpathSync.native(workspace))) throw new Error(`Key file ${keyPath} is inside the workspace, where it could be committed. ${move}`);
+  let ws: string;
+  try { ws = fs.realpathSync.native(workspace); } catch { throw new Error(`Workspace ${workspace} does not exist`); }
+  if (within(real, ws)) throw new Error(`Key file ${keyPath} is inside the workspace, where it could be committed. ${move}`);
   const repo = gitWorkTree(real);
+  if (repo && repo === realOrNull(home)) throw new Error(`Key file ${keyPath} could be committed: your home folder ${repo} is a git repository. Keep keys in a folder outside it and point the credentials at it`);
   if (repo) throw new Error(`Key file ${keyPath} is inside the git working tree ${repo}, where it could be committed. ${move}`);
   return fs.readFileSync(real, "utf8");
 }

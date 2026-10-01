@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { type HttpRequest, type HttpResponse, type Method, retrying } from "../src/upload/http.js";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AscClient } from "../src/upload/apple.js";
+import { type HttpRequest, type HttpResponse, type Method, StoreError, type Transport, fetchTransport, retrying } from "../src/upload/http.js";
+import { PlayClient } from "../src/upload/play.js";
 
 // Answers with the scripted responses in order and records the waits.
 function scripted(...answers: HttpResponse[]) {
@@ -65,5 +69,70 @@ describe("retrying", () => {
     const transport = retrying(async () => { n++; throw new Error("socket hang up"); }, async () => {});
     await expect(transport({ method: "GET", url: "https://x.example" })).rejects.toThrow(/socket hang up/);
     expect(n).toBe(1);
+  });
+});
+
+const listen = async (server: http.Server) => {
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  return (server.address() as AddressInfo).port;
+};
+const close = (server: http.Server) => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()); });
+
+describe("fetchTransport errors", () => {
+  it("names a call that timed out, without the query string", async () => {
+    const server = http.createServer((req) => { req.resume(); });
+    const port = await listen(server);
+    try {
+      const failure = fetchTransport(200)({ method: "GET", url: `http://127.0.0.1:${port}/slow?secret=1` });
+      await expect(failure).rejects.toThrow(`GET http://127.0.0.1:${port}/slow timed out after 0.2 s`);
+      await expect(failure).rejects.not.toThrow(/secret/);
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("names any other network failure with its cause", async () => {
+    const server = http.createServer();
+    const port = await listen(server);
+    await close(server);
+    const failure = fetchTransport()({ method: "POST", url: `http://127.0.0.1:${port}/x?token=1` });
+    await expect(failure).rejects.toThrow(new RegExp(`^POST http://127\\.0\\.0\\.1:${port}/x failed: .*ECONNREFUSED`));
+    await expect(failure).rejects.not.toThrow(/token/);
+  });
+});
+
+describe("error statuses with a body that is not JSON", () => {
+  const html = `<html>${"x".repeat(300)}</html>`;
+  const answer = (status: number): Transport => async () => ({ status, text: html });
+
+  it("still raise a StoreError with the status and the start of the body", async () => {
+    const stores = [
+      new AscClient({ transport: answer(502), token: () => "t" }).request("GET", "/v1/apps"),
+      new PlayClient({ transport: answer(502), token: async () => "t" }, "com.example.demo").openEdit(),
+    ];
+    for (const failure of stores) {
+      await expect(failure).rejects.toBeInstanceOf(StoreError);
+      await expect(failure).rejects.toMatchObject({ status: 502, message: expect.stringContaining(`(502): ${html.slice(0, 200)}`) });
+      await expect(failure).rejects.not.toThrow(html.slice(0, 201));
+    }
+  });
+
+  it("keep the not JSON error on a 2xx", async () => {
+    await expect(new AscClient({ transport: answer(200), token: () => "t" }).request("GET", "/v1/apps")).rejects.toThrow(/App Store Connect answered with something that is not JSON/);
+    await expect(new PlayClient({ transport: answer(200), token: async () => "t" }, "com.example.demo").openEdit()).rejects.toThrow(/Google Play answered with something that is not JSON/);
+  });
+});
+
+describe("fetchTransport on a host with several addresses", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("gives a reason when the cause is an AggregateError with an empty message", async () => {
+    const each = Object.assign(new Error("connect ECONNREFUSED ::1:1"), { code: "ECONNREFUSED" });
+    const cause = Object.assign(new AggregateError([each], ""), { code: "ECONNREFUSED" });
+    vi.stubGlobal("fetch", async () => { throw new TypeError("fetch failed", { cause }); });
+    await expect(fetchTransport()({ method: "GET", url: "https://api.example.test/v1/apps?x=1" })).rejects.toThrow(/^GET https:\/\/api\.example\.test\/v1\/apps failed: (ECONNREFUSED|connect ECONNREFUSED)/);
+    // Without a code on the aggregate, the first address that says something is used.
+    vi.stubGlobal("fetch", async () => { throw new TypeError("fetch failed", { cause: new AggregateError([each], "") }); });
+    await expect(fetchTransport()({ method: "GET", url: "https://api.example.test/v1/apps" })).rejects.toThrow(/failed: connect ECONNREFUSED ::1:1$/);
   });
 });

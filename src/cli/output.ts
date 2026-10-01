@@ -9,6 +9,13 @@ export const globals = (cmd: Command): GlobalOpts => {
   return { ...o, cwd: path.resolve(o.cwd ?? process.cwd()) };
 };
 
+// A comma-separated option that may repeat; empty items are dropped, and a value with no items is an error rather than "all".
+export function list(v: string, prev: string[] = []): string[] {
+  const items = v.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!items.length) throw new Error(`Expected a comma-separated list, got "${v}"`);
+  return [...prev, ...items];
+}
+
 // Throws a usage error that names the bad value and lists the allowed ones.
 export function oneOf<T extends string>(flag: string, value: string, allowed: readonly T[]): T {
   if (!(allowed as readonly string[]).includes(value)) throw new Error(`Unknown ${flag} "${value}"; allowed: ${allowed.join(", ")}`);

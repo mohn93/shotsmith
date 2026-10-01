@@ -37,6 +37,29 @@ describe("planPlay", () => {
     expect(fake.writes()).toEqual([`POST ${EDITS}`, `DELETE ${EDITS}/1001`]);
   });
 
+  it("logs a planning edit it cannot delete, and still returns the plan", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakePlay();
+    fake.failDeleteEdit = true;
+    const lines: string[] = [];
+    const plan = await planPlay(cfg, (await localSets(cfg, "play")).sets, { ...deps(fake), log: (l) => lines.push(l) });
+    expect(plan.problems).toEqual([]);
+    expect(lines).toEqual(["could not delete planning edit 1001; it expires on its own"]);
+  });
+
+  it("deletes its edit when reading fails, and reports the read failure", async () => {
+    const cfg = await uploadWorkspace();
+    const { sets } = await localSets(cfg, "play");
+    for (const failDeleteEdit of [false, true]) {
+      const fake = new FakePlay();
+      fake.failDeleteEdit = failDeleteEdit;
+      const transport: PlayDeps["transport"] = async (req) => (req.method === "GET" && req.url.endsWith("/listings") ? { status: 500, text: JSON.stringify({ error: { code: 500, message: "Backend error" } }) } : fake.transport(req));
+      await expect(planPlay(cfg, sets, { ...deps(fake), transport }), `failDeleteEdit ${failDeleteEdit}`).rejects.toThrow(/\/listings failed \(500\): Backend error$/);
+      expect(fake.calls.at(-1)).toBe(`DELETE ${EDITS}/1001`);
+      expect(fake.edits.has("1001")).toBe(failDeleteEdit);
+    }
+  });
+
   it("plans both tablet slots from one set of images", async () => {
     const cfg = await uploadWorkspace({ targets: ["android-tablet"] });
     const plan = await planPlay(cfg, (await localSets(cfg, "play")).sets, deps(new FakePlay()));
