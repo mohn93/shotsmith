@@ -1,0 +1,177 @@
+{
+  "opener.headline": {
+    "source": "store-copy: A little progress adds up",
+    "text": {
+      "en": "A little progress adds up.",
+      "de": "Kleine Schritte summieren sich."
+    }
+  },
+  "opener.subline": {
+    "source": "store-copy: Build routines that feel like yours. See today's habits at a glance and check them off as you go.",
+    "text": {
+      "en": "See today’s habits at a glance and check them off as you go.",
+      "de": "Sieh die Gewohnheiten von heute auf einen Blick und hake sie unterwegs ab."
+    }
+  },
+  "checkoff.headline": {
+    "source": "store-copy: Build routines that feel like yours. See today's habits at a glance and check them off as you go.",
+    "text": {
+      "en": "Check them\noff as\nyou go.",
+      "de": "Hake sie unterwegs ab."
+    }
+  },
+  "checkoff.subline": {
+    "source": "store-copy: Build routines that feel like yours. See today's habits at a glance and check them off as you go.",
+    "text": {
+      "en": "Build routines that feel like yours.",
+      "de": "Baue Routinen, die zu dir passen."
+    }
+  },
+  "times.headline": {
+    "source": "store-copy: Plan your rituals with times, like a morning walk or reading a chapter.",
+    "text": {
+      "en": "Plan your rituals with times.",
+      "de": "Plane deine Rituale mit Uhrzeiten."
+    }
+  },
+  "times.subline": {
+    "source": "store-copy: Plan your rituals with times, like a morning walk or reading a chapter.",
+    "text": {
+      "en": "Like a morning walk or reading a chapter.",
+      "de": "Etwa einen Morgenspaziergang oder ein Kapitel lesen."
+    }
+  },
+  "times.time1": {
+    "source": "capture: daily-rituals, first row time \"07:30\"",
+    "text": {
+      "en": "07:30",
+      "de": "07:30"
+    }
+  },
+  "times.time2": {
+    "source": "capture: daily-rituals, second row time \"08:00\"",
+    "text": {
+      "en": "08:00",
+      "de": "08:00"
+    }
+  },
+  "times.time3": {
+    "source": "capture: daily-rituals, third row time \"12:30\"",
+    "text": {
+      "en": "12:30",
+      "de": "12:30"
+    }
+  },
+  "week.headline": {
+    "source": "store-copy: Track your week: completion rate, the last 7 days, and your streaks.",
+    "text": {
+      "en": "Track your week.",
+      "de": "Behalte deine Woche im Blick."
+    }
+  },
+  "week.subline": {
+    "source": "store-copy: Track your week: completion rate, the last 7 days, and your streaks.",
+    "text": {
+      "en": "Completion rate, the last 7 days, and your streaks.",
+      "de": "Erfüllungsquote, die letzten 7 Tage und deine Serien."
+    }
+  },
+  "week.rate": {
+    "source": "capture: daily-insights, \"86%\" in the THIS WEEK card",
+    "text": {
+      "en": "86%",
+      "de": "86 %"
+    }
+  },
+  "week.period": {
+    "source": "capture: daily-insights, \"THIS WEEK\" label of the completion card",
+    "text": {
+      "en": "THIS WEEK",
+      "de": "DIESE WOCHE"
+    }
+  },
+  "week.rateLabel": {
+    "source": "capture: daily-insights, \"completion\" beside the percentage",
+    "text": {
+      "en": "completion",
+      "de": "erledigt"
+    }
+  },
+  "week.chartTitle": {
+    "source": "capture: daily-insights, \"The last 7 days\" heading",
+    "text": {
+      "en": "The last 7 days",
+      "de": "Die letzten 7 Tage"
+    }
+  },
+  "week.days": {
+    "source": "capture: daily-insights, day labels under the last 7 days chart",
+    "text": {
+      "en": "M T W T F S S",
+      "de": "M D M D F S S"
+    }
+  },
+  "week.streak": {
+    "source": "capture: daily-insights, \"Your reading streak is at 12 days.\" card",
+    "text": {
+      "en": "Your reading streak is at 12 days.",
+      "de": "Deine Leseserie steht bei 12 Tagen."
+    }
+  },
+  "more.headline": {
+    "source": "store-copy: Add a new ritual whenever you like.",
+    "text": {
+      "en": "Add a ritual, anytime.",
+      "de": "Ein neues Ritual, jederzeit."
+    }
+  },
+  "more.subline": {
+    "source": "store-copy: A little progress adds up",
+    "text": {
+      "en": "Plan it, check it off, watch it add up.",
+      "de": "Planen, abhaken und sehen, wie sich alles summiert."
+    }
+  },
+  "more.glance": {
+    "source": "store-copy: Build routines that feel like yours. See today's habits at a glance and check them off as you go.",
+    "text": {
+      "en": "Today at a glance",
+      "de": "Heute auf einen Blick"
+    }
+  },
+  "more.check": {
+    "source": "store-copy: Build routines that feel like yours. See today's habits at a glance and check them off as you go.",
+    "text": {
+      "en": "Check off as you go",
+      "de": "Unterwegs abhaken"
+    }
+  },
+  "more.times": {
+    "source": "store-copy: Plan your rituals with times, like a morning walk or reading a chapter.",
+    "text": {
+      "en": "Rituals with times",
+      "de": "Rituale mit Uhrzeiten"
+    }
+  },
+  "more.rate": {
+    "source": "store-copy: Track your week: completion rate, the last 7 days, and your streaks.",
+    "text": {
+      "en": "Completion rate",
+      "de": "Erfüllungsquote"
+    }
+  },
+  "more.days": {
+    "source": "store-copy: Track your week: completion rate, the last 7 days, and your streaks.",
+    "text": {
+      "en": "The last 7 days",
+      "de": "Die letzten 7 Tage"
+    }
+  },
+  "more.streaks": {
+    "source": "store-copy: Track your week: completion rate, the last 7 days, and your streaks.",
+    "text": {
+      "en": "Your streaks",
+      "de": "Deine Serien"
+    }
+  }
+}

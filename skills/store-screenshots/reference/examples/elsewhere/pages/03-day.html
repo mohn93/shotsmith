@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, lift, ready } from "shotsmith/kit";
+import { landscape, title, pool, cardShadow } from "./system.js";
+
+const SLICE = 2;
+const s = await stage();
+landscape(s, SLICE);
+const tt = await title(s, { eyebrow: "day.eyebrow", id: "day.headline", sub: "day.subline", align: "left" });
+
+// Capture px, measured on each platform's day capture: the "Sunset lookout" row (corner radius 22 pt).
+const L = s.pick({
+  tall: { x: 330, sw: 800, gap: 270, region: [72, 1746, 1098, 2049], radius: 66, pool: [800, 1800] },
+  p916: { x: 380, sw: 640, gap: 100, region: [91, 1561, 989, 1826], radius: 58, pool: [640, 1500] },
+});
+pool(s, { top: L.pool[0], height: L.pool[1], rgb: "214,130,190", a: 0.26 });
+// phone tilted in 3D; the last timeline row lifts toward the viewer out of an empty recess
+const d = await device({ capture: "elsewhere-day", x: L.x, y: tt.bottom + L.gap, width: L.sw, repaint: true, finish: "silver", z: 10,
+  tilt: "perspective(2600px) rotateY(-18deg) rotateX(6deg) rotateZ(1.5deg)" });
+const h = (L.region[3] - L.region[1]) * d.k * 1.05;
+const card = lift(d, { region: L.region, radius: L.radius, mode: "recess", scale: 1.05, shadow: cardShadow(h, 0.6) });
+card.style.transform = "translateZ(150px)";
+await ready();
+</script></body></html>

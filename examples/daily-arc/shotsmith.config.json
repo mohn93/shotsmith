@@ -1,0 +1,21 @@
+{
+  "app": "Daily Arc",
+  "pages": ["01-opener", "02-checkoff", "03-times", "04-week", "05-more"],
+  "targets": ["iphone-6.9", "android-phone"],
+  "locales": [
+    { "code": "en", "apple": "en-US", "play": "en-US" },
+    { "code": "de", "apple": "de-DE", "play": "de-DE" }
+  ],
+  "fonts": {
+    "display": {
+      "apple": { "500": "fonts/fredoka-latin-500-normal.woff2", "600": "fonts/fredoka-latin-600-normal.woff2", "700": "fonts/fredoka-latin-700-normal.woff2" },
+      "play": { "500": "fonts/fredoka-latin-500-normal.woff2", "600": "fonts/fredoka-latin-600-normal.woff2", "700": "fonts/fredoka-latin-700-normal.woff2" }
+    },
+    "text": {
+      "apple": { "600": "fonts/nunito-latin-600-normal.woff2", "700": "fonts/nunito-latin-700-normal.woff2", "800": "fonts/nunito-latin-800-normal.woff2", "900": "fonts/nunito-latin-900-normal.woff2" },
+      "play": { "600": "fonts/nunito-latin-600-normal.woff2", "700": "fonts/nunito-latin-700-normal.woff2", "800": "fonts/nunito-latin-800-normal.woff2", "900": "fonts/nunito-latin-900-normal.woff2" }
+    }
+  },
+  "captures": { "iphone": { "statusBar": "included" }, "android-phone": { "statusBar": "included" } },
+  "output": "export"
+}

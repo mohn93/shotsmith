@@ -1,0 +1,61 @@
+<!doctype html>
+<html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import * as S from "./system.js";
+const { C, el, D } = S;
+const stage = S.setup();
+const q = new URLSearchParams(location.search);
+const hk = S.H / 2731;
+
+// magenta / crimson mood (keeps it apart from the red monitoring screen that follows)
+S.atmosphere(stage, {
+  top: "#2a0822", bot: "#170611",
+  glows: [
+    { x: 0.08, y: 0.55 * hk, rx: 0.7, ry: 0.6, c: "#a0165e", a: 0.55 },
+    { x: 1.0, y: 0.9 * hk, rx: 0.6, ry: 0.7, c: "#9a2090", a: 0.45 },
+    { x: 0.2, y: 1.9 * hk, rx: 0.8, ry: 0.5, c: "#7a1450", a: 0.40 },
+    { x: 0.9, y: 2.1 * hk, rx: 0.5, ry: 0.4, c: "#6a1d7a", a: 0.30 },
+    { x: 0.5, y: -0.1, rx: 0.9, ry: 0.3, c: "#3a0b2a", a: 0.4 },
+  ],
+  vignette: 0.3, grain: 0.02,
+});
+
+const LY = S.L({
+  tall: { top: 118, size: 118, sub: 58, x: 250, y: 840, sw: 1000, tilt: [7, 16, 7], R: 150 },
+  p916: { top: 90, size: 104, sub: 52, x: 240, y: 690, sw: 1000, tilt: [7, 16, 7], R: 92 },
+  t43:  { top: 72, size: 88, sub: 46, x: 330, y: 560, sw: 900, tilt: [6, 14, 5], R: 88, oneLine: true },
+  t916: { top: 104, size: 110, sub: 54, x: 230, y: 720, sw: 1060, tilt: [6, 14, 5], R: 92 },
+});
+const m = S.TM();
+const copy = el("div", { class: "abs", style: { left: "100px", top: LY.top + "px", zIndex: 40, width: "1080px" } }, stage);
+const eb = S.eyebrow(copy, "SPF · DKIM · DMARC", { color: "#ff7ac0" }); eb.style.zoom = m.eb;
+el("div", { class: "h1", style: { fontSize: LY.size + "px", lineHeight: "1.04", marginTop: m.gap + "px", textAlign: "left" } }, copy, LY.oneLine ? "Email Health, Explained" : "Email Health,<br>Explained");
+el("div", { class: "sub", style: { color: "rgba(255,205,228,0.74)", fontSize: LY.sub + "px", textAlign: "left", marginTop: m.gap * 0.65 + "px" } }, copy, "Inspect SPF and DMARC, and discover<br>DKIM across 44 common selectors.");
+
+const [rx, ry, rz] = LY.tilt;
+const tilt = q.get("tilt") || `perspective(3000px) rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg)`;
+const scr = await S.deviceScreen("02");
+const P = S.phone(stage, { scr, x: LY.x, y: LY.y, sw: LY.sw, tilt, z: 10 });
+
+// The score card sits partly under the app bar in the capture (measured y range in D.ring).
+// A glass card re-typesets it from the real values and replaces it, breaking out past the phone's left edge.
+const [, t0] = P.local(0, D.ring[2] - 10), [, t1] = P.local(0, D.ring[3] + 4);
+const H = t1 - t0, R = Math.min(LY.R, (H - 22) / 2 / 1.1), sw = R * 0.2, circ = 2 * Math.PI * R, frac = 0.75;
+const g = el("div", { class: "glass", style: { left: "-130px", top: t0 + "px", width: P.ow - 30 + 130 + "px", height: H + "px",
+  background: "rgb(46,20,38)", transform: "translateZ(2px)", backdropFilter: "none", WebkitBackdropFilter: "none",
+  boxShadow: "0 60px 110px -30px rgba(0,0,0,0.7), 0 18px 40px -12px rgba(0,0,0,0.5)",
+  display: "flex", alignItems: "center", gap: R * 0.37 + "px", padding: `0 150px 0 ${Math.max(40, R * 0.4)}px` } }, P.el);
+el("div", { style: { position: "relative", width: 2 * R + sw + "px", height: 2 * R + sw + "px", flex: "none" } }, g, `
+  <svg width="${2 * R + sw}" height="${2 * R + sw}" style="position:absolute;inset:0;overflow:visible">
+    <defs><filter id="gl" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${R * 0.09}"/></filter></defs>
+    <g transform="translate(${R + sw / 2} ${R + sw / 2}) rotate(-90)">
+      <circle r="${R}" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="${sw}"/>
+      <circle r="${R}" fill="none" stroke="#ff9f0a" stroke-opacity="0.45" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${circ * frac} ${circ}" filter="url(#gl)"/>
+      <circle r="${R}" fill="none" stroke="#ff9f0a" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${circ * frac} ${circ}"/>
+    </g></svg>
+  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 ${R * 0.65}px/1 UIDisplay;letter-spacing:-0.02em">75<span style="font-size:${R * 0.37}px;font-weight:600;margin-left:2px;margin-top:${R * 0.12}px">%</span></div>`);
+el("div", {}, g, `<div style="font:700 ${Math.min(64, 30 + R * 0.24)}px/1.08 UIDisplay;letter-spacing:-0.01em;color:${C.amber}">Email configuration needs&nbsp;review</div>`);
+
+S.ready();
+</script>
+</body></html>

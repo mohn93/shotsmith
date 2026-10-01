@@ -1,0 +1,44 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, lift, ready } from "shotsmith/kit";
+import { C, s, svgLayer, paper, rng, title, warmShadow, shapeLift } from "./system.js";
+
+const st = await stage();
+// Capture px, measured on each platform's home capture: the Tonight's pick card and the plate that overhangs its top.
+const L = st.pick({
+  tall: { top: 150, size: 140, sub: 54, x: 190, y: 968, sw: 880, gap: 150,
+    region: [72, 855, 1098, 1644], card: [74, 881, 1096, 1642], r: 64, plate: [900, 1050, 193] },
+  p916: { top: 120, size: 120, sub: 48, x: 230, y: 744, sw: 800, gap: 100,
+    region: [90, 779, 989, 1471], card: [92, 802, 987, 1469], r: 56, plate: [815, 950, 169] },
+});
+paper(st, { base: C.paper, light: 0.04, vignette: 0.07, fiber: 1.8, z: 0 });
+
+const tt = await title(st, { eyebrow: "tonight.eyebrow", id: "tonight.headline", sub: "tonight.subline", top: L.top, size: L.size, subSize: L.sub,
+  color: "#FFF6EA", accent: null, ebColor: "#FFFFFF", subColor: "#FFF6EA" });
+
+// phone, upright and centred, cropped by the bottom edge between the tab bar's divider and its icons
+const y = Math.max(L.y, tt.bottom + L.gap);
+const d = await device({ capture: "savory-home", x: L.x, y, width: L.sw, repaint: true, shadow: false, z: 10 });
+warmShadow(st, d, { color: "90,30,15" });
+
+// tomato block with a torn (deckled) lower edge: a pale torn core shows under the red
+const svg = svgLayer(st, 2);
+const rnd = rng(4), E = y + 332;
+const edge = (off, amp) => { let p = `M0 0 L${st.W} 0 L${st.W} ${E}`; let n = 0;
+  for (let x = st.W; x >= 0; x -= 5) { n += (rnd() - .5) * amp; n *= .82; p += ` L${x} ${(E + off + 14 * Math.sin(x / 170) + 8 * Math.sin(x / 47 + 1.3) + n).toFixed(1)}`; }
+  return p + " Z"; };
+const defs = s("defs", {}, svg);
+const f = s("filter", { id: "sh", x: "-10%", y: "-10%", width: "120%", height: "130%" }, defs); s("feGaussianBlur", { stdDeviation: 10 }, f);
+s("path", { d: edge(22, 6), fill: "#6b3a1f", "fill-opacity": .16, filter: "url(#sh)" }, svg);
+s("path", { d: edge(9, 7), fill: "#FFFBF4" }, svg);
+s("path", { d: edge(0, 5), fill: C.tomato }, svg);
+// print texture over the block (below the phone: glass carries no paper fibres)
+paper(st, { mode: 1, z: 5, opacity: .8, light: 0, vignette: 0, fiber: 1.6, seed: 9 });
+
+// Tonight's pick card lifted over its own region, clipped to the card and the plate that overhangs it
+const card = lift(d, { region: L.region, mode: "cover", scale: 1.1 });
+shapeLift(st, card, { region: L.region, shapes: [{ rect: L.card, r: L.r }, { circle: L.plate }],
+  shadow: "drop-shadow(0 6px 8px rgba(90,30,15,.20)) drop-shadow(0 36px 40px rgba(90,30,15,.30))" });
+
+await ready();
+</script></body></html>

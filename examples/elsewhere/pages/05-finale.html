@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, t, ready } from "shotsmith/kit";
+import { C, box, landscape, title, icon } from "./system.js";
+
+const SLICE = 4;
+const s = await stage();
+landscape(s, SLICE);
+await title(s, { eyebrow: "finale.eyebrow", id: "finale.headline", align: "center" });
+
+// features that exist, from the store copy, each with a line icon in a gold ring
+const ITEMS = [
+  ["plane", "finale.flights"], ["list", "finale.itinerary"],
+  ["clock", "finale.days"], ["calendar", "finale.dates"],
+  ["pin", "finale.places"], ["bookmark", "finale.saved"],
+];
+const L = s.pick({ tall: { top: 0.675, gap: 76, ring: 116, size: 46 }, p916: { top: 0.66, gap: 60, ring: 104, size: 42 } });
+const grid = box(s.root, `left:84px;right:84px;top:${Math.round(s.H * L.top)}px;z-index:40;display:grid;grid-template-columns:1fr 1fr;column-gap:40px;row-gap:${L.gap}px`);
+for (const [k, id] of ITEMS) {
+  const cell = box(grid, "position:relative;display:flex;align-items:center;gap:30px");
+  box(cell, `position:relative;flex:0 0 ${L.ring}px;height:${L.ring}px;border-radius:50%;display:flex;align-items:center;justify-content:center;` +
+    "background:radial-gradient(circle at 35% 30%, rgba(255,215,160,0.20), rgba(255,215,160,0.05));box-shadow:inset 0 0 0 2.5px rgba(255,215,160,0.45)",
+    icon(k, { size: Math.round(L.ring * 0.55), color: C.gold, sw: 4.4 }));
+  const label = t.el("div", id, cell);
+  label.style.cssText = `font:700 ${L.size}px/1.15 var(--font-text);letter-spacing:-0.015em;color:${C.cream}`;
+}
+await ready();
+</script></body></html>

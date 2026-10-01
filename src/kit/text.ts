@@ -22,6 +22,7 @@ export interface HeadlineResult { size: number; lines: number; shrink: number; b
 
 // Largest size in [minSize, maxSize] (0.5 px steps) where the text has at most maxLines lines and no word overflows.
 export async function headline(el: HTMLElement, id: string, o: HeadlineOptions): Promise<HeadlineResult> {
+  if (!el.isConnected) throw new Error("headline(): add the element to the page before calling headline(), so it can be measured");
   const minSize = o.minSize ?? Math.round(o.maxSize * 0.6), maxLines = o.maxLines ?? 2, lh = o.lineHeight ?? 1.08;
   el.dataset.claim = id;
   el.innerText = t(id);

@@ -275,12 +275,16 @@ async function applyCoverage(tab: Page, sidecar: Sidecar, fonts: KitContext["fon
   }
   await cdp.detach();
 
+  const unreadable = (file: string, e: Error) => {
+    const name = file.startsWith(root + path.sep) ? path.relative(root, file) : path.basename(file);
+    sidecar.warnings.push(`font.unreadable: ${name} could not be read (${e.message.split("\n")[0]}), so its glyph coverage was not checked`);
+  };
   for (const t of sidecar.texts) {
     const family = Object.values(fonts).find((f) => f.family === firstFamily(t.font));
     if (!family) continue;
     const sources = family.faces.flatMap((face) => {
       const file = fontFileForUrl(root, face.url);
-      return file ? openGlyphSources(file, cache) : [];
+      return file ? openGlyphSources(file, cache, unreadable) : [];
     });
     if (!sources.length) continue;
     const missing = new Set<string>();

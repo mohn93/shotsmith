@@ -1,0 +1,221 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/","gsap":"/node_modules/gsap/index.js"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from "three";
+import * as S from "./system.js";
+import * as G from "./scene3d.js";
+const { C, el } = S;
+const stage = S.setup();
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+
+S.atmosphere(stage, {
+  top: "#15131c", bot: "#0f0d15",
+  glows: [
+    { x: 0.5, y: 1.05, rx: 0.9, ry: 0.55, c: "#2a1b5e", a: 0.45 },
+    { x: 0.45, y: 0.95, rx: 0.35, ry: 0.3, c: "#4a2fa0", a: 0.25 },
+  ],
+  vignette: 0.25, grain: 0.02,
+});
+
+const renderer = G.layer(stage, { z: 2 });
+const scene = new THREE.Scene();
+const LY = S.L({
+  tall: { fov: 40, shift: 0, fade: [2380, 1800], top: 150, size: 128, B: [2215, 2470], bs: 1 },
+  p916: { fov: 40, shift: 0, fade: [1960, 1480], top: 110, size: 116, B: [1745, 1975], bs: 0.92 },
+  t43:  { fov: 34, shift: 170, fade: [1330, 1080], top: 84, size: 100, B: [1352, 1528], bs: 0.78 },
+  t916: { fov: 40, shift: 0, fade: [1960, 1480], top: 110, size: 116, B: [1745, 1975], bs: 0.92 },
+});
+const cam = new THREE.PerspectiveCamera(num("fov", LY.fov), S.W / S.H, 0.1, 500);
+cam.position.set(0, num("cy", 8), 30);
+const pitch = THREE.MathUtils.degToRad(num("pitch", 10));
+cam.lookAt(0, 8 - Math.tan(pitch) * 40, -10);
+if (LY.shift) cam.setViewOffset(S.W, S.H, 0, -LY.shift, S.W, S.H);
+cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+
+// ---------- contour terrain ----------
+function hash(x, y) { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); }
+function noise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+  return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1;
+}
+function ridged(x, y) {
+  let s = 0, a = 0.55, f = 1, w = 1;
+  for (let i = 0; i < 6; i++) {
+    let n = 1 - Math.abs(noise(x * f + i * 17.3, y * f - i * 9.1));
+    n = n * n * w; w = Math.min(1, n * 1.6);
+    s += n * a; a *= 0.5; f *= 2.03;
+  }
+  return s;
+}
+const TW = 80, TD = 120, SEG = 560;
+const AMP = num("amp", 12);
+function height(x, z) {
+  let h = ridged(x * 0.05 + 3.2, z * 0.05 + 1.7) * AMP - AMP * 0.45;
+  h += noise(x * 0.02, z * 0.02) * 2.5;
+  const dv = Math.hypot((x - GXw) * 0.8, z - GZw);           // open valley under the globe
+  h -= AMP * num("carve", 0.25) * Math.exp(-dv * dv / 90);
+  return h;
+}
+const GXw = num("gx", -0.7), GZw = num("gz", -5);
+const tgeo = new THREE.PlaneGeometry(TW, TD, SEG, Math.round(SEG * TD / TW));
+tgeo.rotateX(-Math.PI / 2); tgeo.translate(0, 0, -30);
+const pos = tgeo.attributes.position;
+for (let i = 0; i < pos.count; i++) {
+  const x = pos.getX(i), z = pos.getZ(i);
+  pos.setY(i, height(x, z));
+}
+tgeo.computeVertexNormals();
+const terrainMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: true,
+  uniforms: { uLine: { value: new THREE.Color("#7a5cff") }, uBody: { value: new THREE.Color("#171230") }, uDens: { value: num("dens", 4.2) },
+    uCam: { value: cam.position }, uGain: { value: num("gain", 1.8) }, uLH: { value: S.H }, uDPR: { value: renderer.getPixelRatio() }, uLW: { value: num("lw2", 1.0) }, uFogN: { value: num("fogn", 40) }, uFogF: { value: num("fogf", 125) },
+    uFade: { value: new THREE.Vector2(num("fade0", LY.fade[0]), num("fade1", LY.fade[1])) } },
+  vertexShader: `varying vec3 vW; varying vec3 vN;
+    void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uLine, uBody, uCam; uniform float uDens, uFogN, uFogF, uGain, uLW, uLH, uDPR; uniform vec2 uFade; varying vec3 vW; varying vec3 vN;
+    void main(){
+      float x = vW.y * uDens;
+      float d = abs(fract(x + .5) - .5);
+      float aa = fwidth(x);
+      float line = 1. - smoothstep(aa * uLW, aa * (uLW + 1.1), d);
+      line = mix(line, .32, smoothstep(.35, 1.4, aa));   // crowded contours resolve to their average density
+      vec3 L = normalize(vec3(-.5, .8, .35));
+      float lam = clamp(dot(vN, L), 0., 1.);
+      float slope = 1. - vN.y;
+      float dist = length(vW - uCam);
+      float fog = smoothstep(uFogN, uFogF, dist);
+      float near = smoothstep(uFogN * .9, uFogN * 1.6, dist); // soften the closest band too
+      vec3 body = uBody * (.55 + .7 * lam);
+      vec3 lc = uLine * (.45 + 1.0 * lam + .6 * slope) * uGain;
+      vec3 c = mix(body, lc, line * (.75 + .25 * near));
+      float a = (1. - fog);
+      // fade the whole terrain out toward the bottom of frame (front edge)
+      float py = uLH - gl_FragCoord.y / uDPR;            // logical page px, y down
+      a *= 1. - smoothstep(uFade.y, uFade.x, py);
+      gl_FragColor = vec4(c * a, a);
+    }`,
+});
+terrainMat.premultipliedAlpha = true;
+terrainMat.extensions = { derivatives: true };
+const terrain = new THREE.Mesh(tgeo, terrainMat);
+scene.add(terrain);
+
+// ---------- globe ----------
+const mask = await G.loadMask();
+const GR = num("gr", 3.4);
+const globe = G.globe(mask, {
+  R: GR, center: [30, 0], step: 1.7,
+  pal: { body: "#120e2a", land: "#d4c8ff", sea: "#5a48b8", rim: "#8a6cff", atmo: "#7446ff" },
+  pins: false, arcs: false, atmoStrength: num("atmo", 0.45),
+  lightDir: [-0.5, 0.75, 0.5],
+});
+const gp = new THREE.Vector3(GXw, num("gy", 3.9), GZw);
+globe.position.copy(gp);
+scene.add(globe);
+
+// orbit ring (thin ellipse) around the globe, like a flight's holding pattern
+const ringCurve = new THREE.EllipseCurve(0, 0, GR * 1.75, GR * 1.75, 0, Math.PI * 2);
+const ringPts = ringCurve.getPoints(400).map((p) => new THREE.Vector3(p.x, 0, p.y));
+const ringGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ringPts, true), 400, 0.02, 6, true);
+const ringMat = G.additive(new THREE.ShaderMaterial({
+  uniforms: { uC: { value: new THREE.Color("#8a6cff") } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 uC; varying vec3 vW; void main(){ gl_FragColor = vec4(uC * .75, 0.); }` }));
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.position.copy(gp);
+ring.rotation.set(THREE.MathUtils.degToRad(num("rx", 16)), 0, THREE.MathUtils.degToRad(num("rz", -10)));
+ring.renderOrder = 5;
+scene.add(ring);
+
+// query path: from the globe, sweeping across the terrain and out of frame right
+const path = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(gp.x + GR * 0.2, gp.y - GR * 0.9, gp.z + GR * 0.5),
+  new THREE.Vector3(gp.x + 3.5, gp.y - 4.8, gp.z + 3),
+  new THREE.Vector3(gp.x + 11, gp.y - 5.4, gp.z + 2.5),
+  new THREE.Vector3(gp.x + 26, gp.y - 4.6, gp.z - 3),
+]);
+const pathMat = G.additive(new THREE.ShaderMaterial({
+  uniforms: { uA: { value: new THREE.Color("#5a3fd8") }, uB: { value: new THREE.Color("#b89cff") } },
+  vertexShader: `varying float vT; void main(){ vT = uv.x; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `uniform vec3 uA, uB; varying float vT; void main(){ float f = smoothstep(0., .12, vT); gl_FragColor = vec4(mix(uB, uA, vT) * f * 1.2, 0.); }` }));
+// (query path removed: nothing should read as a route between places)
+
+// ground marker under the globe + leader to an etched label
+const groundY = height(gp.x, gp.z);
+const mk = new THREE.Mesh(new THREE.RingGeometry(GR * 0.9, GR * 0.9 + 0.05, 160), G.additive(new THREE.MeshBasicMaterial({ color: new THREE.Color("#7a5cff").multiplyScalar(0.9), side: THREE.DoubleSide })));
+mk.rotation.x = -Math.PI / 2; mk.position.set(gp.x, groundY + 0.6, gp.z); if (q.has("ring")) scene.add(mk);
+
+// page px -> point on the terrain (march the camera ray until it dips under the heightfield)
+function groundAt(px, py) {
+  const ndc = new THREE.Vector3(px / S.W * 2 - 1, 1 - py / S.H * 2, 0.5).unproject(cam);
+  const dir = ndc.sub(cam.position).normalize();
+  const p = cam.position.clone();
+  for (let t = 0; t < 400; t += 0.05) { p.copy(cam.position).addScaledVector(dir, t); if (p.y < height(p.x, p.z)) return p; }
+  return p;
+}
+// label texture etched onto the ground
+await document.fonts.load("600 92px UIMono"); await document.fonts.load("500 76px UIMono");
+const lc = document.createElement("canvas"); lc.width = 1024; lc.height = 512;
+const lx = lc.getContext("2d");
+lx.fillStyle = "rgba(0,0,0,0)"; lx.fillRect(0, 0, 1024, 512);
+lx.fillStyle = "#b8a4ff"; lx.font = "600 92px UIMono, monospace"; lx.textBaseline = "top";
+lx.fillText("example.com", 40, 40); lx.font = "500 76px UIMono, monospace"; lx.fillText("A 203.0.113.10", 40, 160); lx.fillText("TTL 300s", 40, 262);
+const ltex = new THREE.CanvasTexture(lc); ltex.anisotropy = 8;
+const labelMat = G.additive(new THREE.ShaderMaterial({ uniforms: { uT: { value: ltex } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `uniform sampler2D uT; varying vec2 vUv; void main(){ vec4 t = texture2D(uT, vUv); gl_FragColor = vec4(t.rgb * t.a * .8, 0.); }` }));
+labelMat.depthTest = false;
+const label = new THREE.Mesh(new THREE.PlaneGeometry(num("lw", 6.4), num("lw", 6.4) / 2), labelMat);
+label.renderOrder = 8;
+label.rotation.x = -Math.PI / 2;
+label.position.copy(groundAt(num("lpx", 370), num("lpy", 1900))).add(new THREE.Vector3(0, 0.25, 0));
+if (q.has("label")) scene.add(label);
+
+renderer.render(scene, cam);
+const proj = (v) => { const p = v.clone().project(cam); return [Math.round((p.x + 1) / 2 * S.W), Math.round((1 - p.y) / 2 * S.H)]; };
+console.log("label", proj(label.position), "ring", proj(mk.position), "groundY", groundY.toFixed(2), "globe", proj(gp));
+
+// ---------- copy ----------
+const copy = el("div", { class: "abs", style: { left: "112px", top: LY.top + "px", zIndex: 40 } }, stage,
+  `<div style="font:500 ${LY.size}px/1.08 UIDisplay;letter-spacing:-0.016em">Pro-grade<br>DNS toolkit</div>
+   <div style="font:400 ${LY.size}px/1.1 UIDisplay;letter-spacing:-0.018em;color:${C.violet};margin-top:4px">Debug smarter.</div>`);
+
+// ---------- proof badges: 3D icon tiles + honest numbers ----------
+const env = G.studioEnvironment(renderer);
+const bscene = new THREE.Scene();
+const bcam = G.pagePerspective(14);
+const { RoundedBoxGeometry } = await import("three/addons/geometries/RoundedBoxGeometry.js");
+async function tile(px, py, { color, metal, rough, glyph, glyphColor, rotY = -30, rotX = 16, envI = 1.6, sheen = 0 }) {
+  const size = 168 * LY.bs, depth = 46 * LY.bs;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new RoundedBoxGeometry(size, size, depth, 8, 36 * LY.bs),
+    new THREE.MeshPhysicalMaterial({ color, metalness: metal, roughness: rough, clearcoat: 1, clearcoatRoughness: 0.06, envMap: env, envMapIntensity: envI, sheen, sheenColor: new THREE.Color("#b9a6ff") }));
+  g.add(body);
+  const tex = await G.svgTexture(S.lineIcon(glyph, { size: 512, color: glyphColor, sw: 4.6 }), 512);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(size * 0.6, size * 0.6), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false }));
+  face.position.z = depth / 2 + 0.6; g.add(face);
+  g.position.set(px, -py, 0);
+  g.rotation.set(THREE.MathUtils.degToRad(rotX), THREE.MathUtils.degToRad(rotY), THREE.MathUtils.degToRad(-3));
+  bscene.add(g);
+  // contact glow under the tile
+  const sh = G.glow("#6a48ff", 300 * LY.bs, 0.22); sh.position.set(px + 10, -py - 30, -60); bscene.add(sh);
+}
+const [B1, B2] = LY.B, TX = 112 + 84 * LY.bs;
+await tile(TX, B1, { color: "#6f4cf6", metal: 0.2, rough: 0.25, glyph: "globe", glyphColor: "#ffffff", envI: 1.8 });
+await tile(TX, B2, { color: "#eeeaf6", metal: 0.05, rough: 0.32, glyph: "lookup", glyphColor: "#5b3fd6", envI: 2.2 });
+renderer.autoClear = false;
+renderer.clearDepth();
+renderer.render(bscene, bcam);
+const badge = (y, t, s) => el("div", { class: "abs", style: { left: 112 + 226 * LY.bs + "px", top: y - 70 * LY.bs + "px", zIndex: 40 } }, stage,
+  `<div style="font:600 ${60 * LY.bs}px/1.1 UIDisplay;letter-spacing:-0.01em">${t}</div><div style="font:400 ${46 * LY.bs}px/1.25 UIDisplay;color:rgba(235,235,245,0.62);margin-top:6px">${s}</div>`);
+badge(B1, "37 resolver endpoints", "Compare answers side by side");
+badge(B2, "7 record types", "A · AAAA · CNAME · MX · TXT · SOA · PTR");
+
+S.ready();
+</script>
+</body></html>

@@ -1,0 +1,124 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import * as K from "./common.js";
+const { W, H } = K;
+const cvs = K.pageShell();
+await K.loadFonts();
+const cap = await K.loadImg("/inputs/1.png");
+
+// ---- layout ----
+const screenW = 900;
+const g = K.deviceGeom((W - screenW) / 2, 800, screenW);
+const ringCap = [1213, 2074];                       // score ring centre in capture px
+const C = [g.x + ringCap[0] * g.s, g.y + ringCap[1] * g.s];
+const R = 274, MAG = 2.02;
+
+// ---- ui layer ----
+const ui = K.canvas(); const cx = ui.getContext("2d");
+K.eyebrow(cx, "DOMAIN HEALTH", { y: 176 });
+K.headline(cx, ["Your domain,", "scored in seconds."], {
+  y: 392, size: 112, sub: "Email health, DNS records and fixes in one check.", subSize: 44, subGap: 40,
+});
+K.drawDevice(cx, cap, g);
+const mask = K.deviceMask(g, 0.25, 50);
+
+const gl = K.initGL(cvs);
+const fs = `#version 300 es
+${K.GLSL_COMMON}
+uniform sampler2D uUI, uCap, uMask;
+uniform vec2 uC, uCapC, uCapSize; uniform float uR, uS, uMag;
+uniform vec4 uScreen;
+out vec4 o;
+
+vec3 bg(vec2 p){
+  vec2 uv = p/uRes.x;
+  vec3 c = night(uv);
+  c += meshGlow(uv, vec2(.5,.62), 2.0);
+  // score "sonar": thin rings radiating from the ring, fading with distance
+  float d = length(p-uC);
+  float sr = signalRings(p, uC, 64., 1.3, 4.0);
+  float fall = smoothstep(uR*.9, uR*1.4, d) * exp(-(d-uR)/900.);
+  c += mix(GREEN, CYAN, .45) * sr * fall * .95;
+  // wide soft bloom of the rings
+  c += mix(GREEN, CYAN, .5) * .10 * exp(-(d-uR)/600.) * step(uR,d);
+  // halo + soft rays from behind the device top
+  vec2 L = vec2(uRes.x*.5, uScreen.y+80.);
+  float dl = length((p-L)*vec2(.8,1.));
+  float ang = atan(p.y-L.y, p.x-L.x);
+  float rays = pow(fbm3(vec2(ang*7., .5))*.75 + fbm3(vec2(ang*19., 3.))*.35, 3.);
+  c += mix(BLUE, CYAN, .35) * rays * exp(-dl/600.) * .55 * smoothstep(120., 380., dl);
+  c += vec3(.25,.45,1.) * exp(-dl/420.) * .22;
+  return c;
+}
+
+void main(){
+  vec2 p = px();
+  vec2 uv = p/uRes;
+  vec3 col = bg(p);
+  // rim light from the glow mask (soft light spill around device edges)
+  float m = texture(uMask, uv).r;
+  col += vec3(.22,.45,1.) * m * .30;             // edge light spill around the device
+  vec4 ui = texture(uUI, uv);
+  col = ui.rgb + col*(1.-ui.a);
+
+  // ---- glass lens over the score ring ----
+  vec2 dp = p - uC; float r = length(dp)/uR;
+  // drop shadow under the lens (on the device)
+  float sh = exp(-pow(max(length(p-uC-vec2(0.,38.))/uR - .9, 0.)/.14, 2.));
+  col *= 1. - .28*sh*step(1.,r);
+  // caustic: light focused by the lens lands as a bright crescent in its shadow
+  float cr = length(p-uC-vec2(0.,40.))/uR;
+  col += vec3(.45,1.,.8) * exp(-pow((cr-1.0)/.018,2.)) * step(1.,r) * .22;
+  if (r < 1.) {
+    vec2 d = dp/uR;
+    float h = sqrt(1.-r*r);
+    // barrel refraction: stronger bend near the rim
+    float bend = 1. + .04*pow(r,2.) + .08*pow(r,18.);
+    vec2 base = uCapC + dp/(uS*uMag);
+    vec3 lc;
+    for(int k=0;k<3;k++){
+      float ca = 1. + (float(k)-1.)*.018*pow(r,4.);
+      vec2 sp = uCapC + dp*bend*ca/(uS*uMag);
+      lc[k] = textureLod(uCap, sp/uCapSize, mix(0., 4.5, smoothstep(.88,.985,r)))[k];
+    }
+    // slight cool tint + inner edge darkening
+    lc = mix(lc, lc*vec3(.93,.97,1.02), .6);
+    lc *= mix(1., .9, smoothstep(.86,1.,r));
+    // fresnel reflection of the environment
+    float fr = pow(1.-h, 2.5);
+    vec3 env = bg(uC + d*uR*1.9);
+    lc = mix(lc, env*1.4+vec3(.10,.15,.30), fr*.45);
+    // specular highlights
+    vec2 hl = d - vec2(-.38,-.46);
+    float spec = exp(-pow(length(hl*vec2(1.,1.9)),2.)/.018);
+    float arc = smoothstep(.06,.0,abs(r-.9)) * smoothstep(.2,-.6, d.x+d.y);
+    lc += vec3(1.) * (spec*.55 + arc*.35);
+    // rim
+    float rim = smoothstep(.972,.99,r);
+    lc = mix(lc, vec3(.92,.96,1.), rim*.9);
+    lc = mix(lc, vec3(.35,.55,.95), smoothstep(.9,.97,r)*(1.-rim)*.25);
+    float aa = 1.-smoothstep(.994,1.,r);
+    col = mix(col, lc, aa);
+  }
+  // outer glow ring
+  col += vec3(.3,.55,1.) * exp(-max(r-1.,0.)/.05) * step(1.,r) * .10;
+
+  // vignette
+  vec2 vq = (uv-.5)*vec2(1.,.9);
+  col *= 1. - .35*dot(vq,vq);
+  col = finish(col, p, .018);
+  o = vec4(col, 1.);
+}`;
+const prog = K.program(gl, fs);
+run();
+function run() {
+  K.run(gl, prog, {
+    textures: { uUI: K.texture(gl, ui), uCap: K.texture(gl, cap, { mip: true }), uMask: K.texture(gl, mask) },
+    uniforms: {
+      uRes: [W, H], uC: C, uR: R, uS: g.s, uMag: MAG, uCapC: ringCap, uCapSize: [K.CAP_W, K.CAP_H],
+      uScreen: [g.x, g.y, g.screenW, g.screenH],
+    },
+  });
+  window.__ready = true;
+}
+</script></body></html>

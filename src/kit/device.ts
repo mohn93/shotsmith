@@ -23,6 +23,25 @@ export interface Device {
 const loadImage = (src: string) => new Promise<HTMLImageElement>((res, rej) => {
   const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(`Could not load ${src}`)); i.src = src;
 });
+// Context URLs are file paths; encode each segment so names with spaces, # or ? load.
+export const href = (p: string): string => p.split("/").map(encodeURIComponent).join("/");
+
+// Resolves a capture for the target's platform and locale (warning on locale fallback), loads it and records it.
+async function loadCapture(name: string): Promise<HTMLImageElement> {
+  const c = ctx();
+  const file = c.captures.files[name];
+  if (!file) throw missingCapture(c, name);
+  if (file.fallback) state.warnings.push(`capture.fallback: "${name}" for ${c.locale.code} uses ${file.url}`);
+  const image = await waitFor(loadImage(href(file.url)));
+  state.captures.add(file.url);
+  return image;
+}
+
+/** Loads a capture for page art outside a device frame (crops, card stacks, textures). Same lookup and rules as device(). */
+export async function capture(name: string): Promise<HTMLImageElement> {
+  return loadCapture(name);
+}
+
 const luminance = (c: readonly number[]) => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
 const rgb = (c: readonly number[]) => `rgb(${c[0]},${c[1]},${c[2]})`;
 
@@ -126,10 +145,7 @@ function div(style: Partial<CSSStyleDeclaration>, parent: HTMLElement): HTMLDivE
 export async function device(o: DeviceOptions): Promise<Device> {
   const c = ctx();
   const kind = KIND[c.target.platform];
-  const file = c.captures.files[o.capture];
-  if (!file) throw missingCapture(c, o.capture);
-  if (file.fallback) state.warnings.push(`capture.fallback: "${o.capture}" for ${c.locale.code} uses ${file.url}`);
-  const image = await waitFor(loadImage(file.url));
+  const image = await loadCapture(o.capture);
   const scr = composeScreen(image, o);
   const parent = o.parent ?? state.root!;
 
@@ -174,7 +190,6 @@ export async function device(o: DeviceOptions): Promise<Device> {
   wrap.appendChild(screen);
   await waitFor(screen.decode());
 
-  state.captures.add(file.url);
   state.devices.push({ platform: c.target.platform, capture: o.capture, statusBar: c.captures.statusBar, repaint: !!o.repaint, screen: [scr.w, scr.h] });
   const sample = probe(image);
   return {

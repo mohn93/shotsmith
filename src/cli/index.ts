@@ -6,6 +6,7 @@ import { registerClaims } from "./commands/claims.js";
 import { registerInit } from "./commands/init.js";
 import { registerRender } from "./commands/render.js";
 import { registerReview } from "./commands/review.js";
+import { registerSkill } from "./commands/skill.js";
 
 // Read from argv, since --help and --version stop parsing before options are known.
 const wantsJson = () => process.argv.slice(2).includes("--json");
@@ -27,6 +28,7 @@ registerCheck(program);
 registerClaims(program);
 registerBuild(program);
 registerReview(program);
+registerSkill(program);
 
 // Exit 0 success, 1 error findings (set by the commands), 2 usage or runtime failure (here).
 function fail(e: unknown): void {

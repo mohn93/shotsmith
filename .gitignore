@@ -2,3 +2,7 @@ node_modules/
 dist/
 test/.tmp/
 *.log
+examples/*/node_modules/
+examples/*/out/
+examples/*/review/
+examples/*/export/

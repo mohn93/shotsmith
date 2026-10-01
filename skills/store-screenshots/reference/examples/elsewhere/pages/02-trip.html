@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, lift, ready } from "shotsmith/kit";
+import { landscape, title, waves, pool, cardShadow } from "./system.js";
+
+const SLICE = 1;
+const s = await stage();
+landscape(s, SLICE);
+waves(s, SLICE, { fadeTo: SLICE * s.W + 300 });
+const tt = await title(s, { eyebrow: "trip.eyebrow", id: "trip.headline", sub: "trip.subline", align: "center" });
+
+// Capture px, measured on each platform's trips capture: the "Lisbon in spring" card (corner radius 22 pt).
+const L = s.pick({
+  tall: { sw: 900, gap: 264, region: [72, 564, 1098, 1338], radius: 66, pool: [850, 1700] },
+  p916: { sw: 760, gap: 150, region: [91, 526, 989, 1203], radius: 58, pool: [700, 1500] },
+});
+// warm light pooling behind the phone
+pool(s, { top: L.pool[0], height: L.pool[1], rgb: "255,170,130", a: 0.30 });
+// phone upright, standing in the sea, cropped by the bottom edge
+const d = await device({ capture: "elsewhere-trips", x: (s.W - L.sw) / 2, y: tt.bottom + L.gap, width: L.sw, repaint: true, finish: "silver", z: 10 });
+const h = (L.region[3] - L.region[1]) * d.k * 1.16;
+lift(d, { region: L.region, radius: L.radius, scale: 1.16, shadow: cardShadow(h, 0.34, 0.3) });
+await ready();
+</script></body></html>

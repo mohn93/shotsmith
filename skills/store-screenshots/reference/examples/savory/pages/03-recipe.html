@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, lift, ready } from "shotsmith/kit";
+import { C, svgLayer, paper, title, warmShadow } from "./system.js";
+import { kit } from "./art.js";
+
+const st = await stage();
+// region: the chips, "What you'll need" and the ingredients card, in each platform's recipe capture px
+const L = st.pick({
+  tall: { top: 150, size: 140, sub: 54, x: 40, y: 790, sw: 840, gap: 170, lemon: [1190, 1120, 150], sprig: [1150, 1780, 1215, 1480, 170],
+    region: [40, 1440, 1130, 2232], r: 64 },
+  p916: { top: 120, size: 120, sub: 48, x: 70, y: 680, sw: 650, gap: 100, lemon: [1180, 930, 130], sprig: [1150, 1560, 1215, 1290, 150],
+    region: [63, 1292, 1016, 1984], r: 56 },
+});
+const BUTTER = "#F8E3C0";
+paper(st, { base: BUTTER, light: 0.05, vignette: 0.06, fiber: 1.8, z: 0, seed: 7 });
+
+const tt = await title(st, { eyebrow: "recipe.eyebrow", id: "recipe.headline", sub: "recipe.subline", top: L.top, size: L.size, subSize: L.sub,
+  accent: C.tomatoDeep });
+
+// lemon and herbs on the table, off the right edge (the recipe is "Lemon & herb")
+const dy = Math.max(0, tt.bottom + L.gap - L.y);
+const svg = svgLayer(st, 4);
+const K = kit(svg, 3);
+K.lemonHalf(svg, L.lemon[0], L.lemon[1] + dy, L.lemon[2], 20);
+K.sprig(svg, L.sprig[0], L.sprig[1] + dy, L.sprig[2], L.sprig[3] + dy, L.sprig[4]);
+paper(st, { mode: 1, z: 5, opacity: .8, light: 0, vignette: 0, fiber: 1.6, seed: 2 });
+
+// phone laid slightly askew, like a clipping on the table: a flat 2D turn, no perspective
+const d = await device({ capture: "savory-recipe", x: L.x, y: L.y + dy, width: L.sw, tilt: "rotate(-4deg)", repaint: true, shadow: false, z: 10 });
+warmShadow(st, d);
+// the ingredients block lifted over its own region; on a turned phone the card turns with it
+lift(d, { region: L.region, mode: "cover", scale: 1.1, radius: L.r,
+  shadow: "0 4px 6px rgba(63,41,36,.16), 0 28px 34px -6px rgba(63,41,36,.26)" });
+
+await ready();
+</script></body></html>

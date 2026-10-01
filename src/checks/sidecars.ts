@@ -6,6 +6,9 @@ import { outPath } from "../render/render.js";
 import { type Sidecar, sidecarPath } from "../shared/sidecar.js";
 import { type Finding, err, warn } from "./findings.js";
 
+// These mean the page could not be verified, so they fail the checks.
+const UNVERIFIED = new Set(["kit.unused", "font.unreadable"]);
+
 // A text for a one-line message.
 const short = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 40);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -90,8 +93,7 @@ export function checkSidecars(cfg: ResolvedConfig, sidecars: Sidecar[]): Finding
     for (const w of s.warnings) {
       const i = w.indexOf(": ");
       const rule = i > 0 && /^[a-z][\w.]*$/i.test(w.slice(0, i)) ? w.slice(0, i) : "kit.warning";
-      // A page that does not use the kit cannot be verified (text, claims, fonts), so it fails the checks.
-      out.push((rule === "kit.unused" ? err : warn)(rule, i > 0 ? w.slice(i + 2) : w, where));
+      out.push((UNVERIFIED.has(rule) ? err : warn)(rule, i > 0 ? w.slice(i + 2) : w, where));
     }
   }
   return out;

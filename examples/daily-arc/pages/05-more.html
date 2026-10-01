@@ -1,0 +1,61 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, capture, t, ready } from "shotsmith/kit";
+import { C, title, box, crop, lineBoxes, svgLayer, s, sparkle, arcPath, ICONS } from "./system.js";
+
+const SHADE = "#6E4FD8";
+const st = await stage();
+st.root.style.background = C.grape;
+const L = st.pick({
+  tall: { y: 150, size: 176, subSize: 52, subGap: 40, subWidth: 1060, btnGap: 100, btnW: 820, gridGap: 220, bottom: 235, maxTH: 440, label: 60, icon: 128 },
+  p916: { y: 120, size: 150, subSize: 44, subGap: 34, subWidth: 1060, btnGap: 80, btnW: 700, gridGap: 170, bottom: 150, maxTH: 360, label: 54, icon: 104 },
+});
+
+const tt = await title(st, "more.headline", { y: L.y, size: L.size, color: C.white, sub: "more.subline", subSize: L.subSize, subGap: L.subGap, subWidth: L.subWidth });
+
+// the real "+ Add a ritual" button from the rituals capture (measured in capture px)
+const img = await capture("daily-rituals");
+const BTN = st.pick({ tall: { region: [81, 2052, 545, 2142], radius: 45 }, p916: { region: [98, 1827, 505, 1906], radius: 39 } });
+const btn = crop(st, img, { region: BTN.region, x: 88, y: tt.bottom + L.btnGap, w: L.btnW, rotate: -4, radius: BTN.radius, edge: C.greenDeep, edgeH: 18, z: 30, shadow: "rgba(30,10,80,0.45)" });
+
+// finale grid: only features in the store copy
+const ic = {
+  glance: () => { const a = (x) => arcPath(32, 44, 27, x[0], x[1]);
+    return `<svg viewBox="0 0 64 64"><path d="${a([-90, -56])}" stroke="${C.green}" stroke-width="13" fill="none"/><path d="${a([-52, -18])}" stroke="${C.green}" stroke-width="13" fill="none"/><path d="${a([-14, 20])}" stroke="${C.green}" stroke-width="13" fill="none"/><path d="${a([24, 56])}" stroke="${C.green}" stroke-width="13" fill="none"/><path d="${a([60, 90])}" stroke="${C.mint}" stroke-width="13" fill="none"/></svg>`; },
+  check: () => `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="${C.green}"/><path d="M19 33l9 9 17-19" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  times: () => `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="${C.peach}"/><path d="M32 17v16l10 7" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  rate: () => `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="23" fill="none" stroke="#D6E4FD" stroke-width="10"/><path d="${arcPath(32, 32, 23, 0, 310)}" fill="none" stroke="${C.sky}" stroke-width="10" stroke-linecap="round"/></svg>`,
+  days: () => `<svg viewBox="0 0 64 64"><rect x="6" y="30" width="12" height="26" rx="6" fill="#AED9CA"/><rect x="26" y="14" width="12" height="42" rx="6" fill="#AED9CA"/><rect x="46" y="20" width="12" height="36" rx="6" fill="${C.green}"/></svg>`,
+  streaks: () => ICONS.flame("#F2552C", "#FFC83D"),
+};
+const TILES = ["glance", "check", "times", "rate", "days", "streaks"];
+const TW = 520, GX = 44, GY = 48, X0 = (st.W - 2 * TW - GX) / 2;
+const Y0 = tt.bottom + L.btnGap + btn.h + L.gridGap;
+const TH = Math.min(L.maxTH, (st.H - L.bottom - Y0 - 2 * GY) / 3);
+const labels = TILES.map((k, i) => {
+  const x = X0 + (i % 2) * (TW + GX), y = Y0 + Math.floor(i / 2) * (TH + GY);
+  const tile = box(st.root, `left:${x}px;top:${y}px;width:${TW}px;height:${TH}px;border-radius:64px;background:${C.white};z-index:20;` +
+    `box-shadow:0 20px 0 ${SHADE}, 0 60px 80px -40px rgba(30,10,80,0.45)`,
+    `<div style="position:absolute;left:52px;top:${TH * 0.11}px;width:${L.icon}px;height:${L.icon}px">${ic[k]()}</div>`);
+  const label = t.el("div", `more.${k}`, tile);
+  label.style.cssText = `position:absolute;left:52px;bottom:${TH * 0.12}px;font:900 ${L.label}px/1.08 var(--font-text);color:${C.ink};text-wrap:balance`;
+  return label;
+});
+// One label size and width for the whole grid: the largest size at which every label fits in two lines, in a
+// column narrow enough to break most labels in two, widened only for a long single word.
+const fits = () => labels.every((l) => l.scrollWidth <= l.clientWidth && lineBoxes(st, l).length <= 2);
+fit: for (let size = L.label; size > L.label * 0.7; size -= 1) for (const w of [380, TW - 88]) {
+  labels.forEach((l) => { l.style.fontSize = size + "px"; l.style.width = w + "px"; });
+  if (fits()) break fit;
+}
+
+const o = svgLayer(st, 40);
+const hl = lineBoxes(st, tt.h);
+if (hl[0].r < 1020) sparkle(o, 1130, (hl[0].t + hl[0].b) / 2 + 20, 52, C.white);
+if (hl[1] && hl[1].r < 980) sparkle(o, 1040, (hl[1].t + hl[1].b) / 2 + 40, 26, C.sunshine);
+const by = tt.bottom + L.btnGap + btn.h / 2;
+sparkle(o, 1040, by + 20, 40, C.white);
+s("circle", { cx: 1150, cy: by - 20, r: 16, fill: C.sunshine }, o);
+
+await ready();
+</script></body></html>

@@ -31,6 +31,10 @@ export async function strip(cfg: ResolvedConfig, o: { target: string; locale?: s
   if (!t) throw new Error(`Unknown target "${o.target}"`);
   const files = cfg.pages.map((p) => outPath(cfg, locale, t.name, p));
   for (const f of files) if (!fs.existsSync(f)) throw new Error(`Missing ${f}; run shotsmith build`);
+  for (const f of files) {
+    const m = await sharp(f).metadata();
+    if (m.width !== t.w || m.height !== t.h) throw new Error(`${f} is ${m.width}x${m.height}, expected ${t.w}x${t.h}; run shotsmith build`);
+  }
   const raws = await Promise.all(files.map((f) => sharp(f).removeAlpha().raw().toBuffer()));
   const seams = raws.slice(0, -1).map((b, i) => ({ between: [cfg.pages[i], cfg.pages[i + 1]] as [string, string], steps: seamSteps(b, raws[i + 1], t.w, t.h) }));
   const file = path.join(cfg.root, "review", `strip-${locale}-${t.name}.jpg`);

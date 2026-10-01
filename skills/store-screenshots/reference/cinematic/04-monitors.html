@@ -1,0 +1,207 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/","gsap":"/node_modules/gsap/index.js"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import * as S from "./system.js";
+import * as G from "./scene3d.js";
+const { C, el, IC, D } = S;
+const stage = S.setup();
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+
+// ---- blood-red fog backdrop ----
+const _L = S.L({ tall: [630, 640], p916: [630, 520], t43: [300, 470], t916: [630, 560] });
+const TXU = _L[0] / 1260, TYU = (_L[1] + 90) / 1260;
+S.atmosphere(stage, {
+  top: "#0a0205", bot: "#070204",
+  glows: [
+    { x: TXU, y: TYU, rx: 0.26, ry: 0.20, c: "#c8141c", a: 0.40 },   // haze lit by the mast head
+    { x: TXU, y: TYU + 0.35, rx: 0.55, ry: 0.55, c: "#3a060c", a: 0.40 },
+    { x: 0.5, y: 1.50, rx: 0.95, ry: 0.32, c: "#6e1212", a: 0.45 },   // ground fog glow
+    { x: 0.5, y: 0.02, rx: 0.9, ry: 0.35, c: "#24050e", a: 0.45 },
+  ],
+  fog: { amount: 0.22, scale: 1.8, seed: 4.0, color: "#a01c16", y: 1.3 },
+  vignette: 0.7, grain: 0.02,
+});
+
+// ---- three.js: PBR lattice mast ----
+const renderer = G.layer(stage, { z: 2 });
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = num("exp", 1.15);
+const scene = new THREE.Scene();
+const LY = S.L({
+  tall: { top: 640, y20: 2245, tx: 630, Y0: 1640, sx: 62, sw: 1136, fog: 1650 },
+  p916: { top: 520, y20: 1720, tx: 630, Y0: 1230, sx: 62, sw: 1136, fog: 1280 },
+  t43:  { top: 470, y20: 1420, tx: 320, Y0: 700, sx: 500, sw: 1040, fog: 1200, z: 0.68 },
+  t916: { top: 560, y20: 1740, tx: 630, Y0: 1250, sx: 62, sw: 1136, fog: 1300 },
+});
+const cam = new THREE.PerspectiveCamera(num("fov", 34), S.W / S.H, 0.5, 600);
+// solve camera distance + aim so the mast head and its y=20 level land on the layout's page rows
+{
+  let best = null; const v = new THREE.Vector3();
+  const py = (y) => { v.set(0, y, 0).project(cam); return (1 - v.y) / 2 * S.H; };
+  for (let cz = 100; cz <= 360; cz += 2) for (let ly = 20; ly <= 95; ly += 0.5) {
+    cam.position.set(34 * cz / 190, 6, cz); cam.lookAt(0, ly, 0); cam.updateMatrixWorld();
+    const e = Math.abs(py(93.2) - LY.top) + Math.abs(py(20) - LY.y20);
+    if (!best || e < best[0]) best = [e, cz, ly];
+  }
+  cam.position.set(34 * best[1] / 190, 6, best[1]); cam.lookAt(0, best[2], 0);
+  if (LY.tx !== 630) cam.setViewOffset(S.W, S.H, 630 - LY.tx, 0, S.W, S.H);
+  cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+}
+
+const Ht = 78, RB = num("rb", 11.5), RT = num("rt", 2.6);               // tower height, leg radius at base/top
+const rad = (y) => RB + (RT - RB) * Math.pow(y / Ht, 0.9);
+const legAng = [90, 210, 330].map((a) => THREE.MathUtils.degToRad(a + num("rot", 18)));
+const legP = (i, y) => new THREE.Vector3(Math.cos(legAng[i]) * rad(y), y, Math.sin(legAng[i]) * rad(y));
+const parts = [];
+const up = new THREE.Vector3(0, 1, 0);
+function member(a, b, r, seg = 8) {
+  const d = b.clone().sub(a), len = d.length();
+  const g = new THREE.CylinderGeometry(r, r, len, seg, 1, false);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, d.normalize()));
+  g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+  parts.push(g);
+}
+function box(w, h, d, p, rotY = 0) {
+  const g = new THREE.BoxGeometry(w, h, d); g.rotateY(rotY); g.translate(p.x, p.y, p.z); parts.push(g);
+}
+// levels (denser toward the top, like a real mast)
+const lv = []; const N = 22;
+for (let i = 0; i <= N; i++) lv.push(Ht * (1 - Math.pow(1 - i / N, 1.25)));
+for (let i = 0; i < 3; i++) {
+  for (let k = 0; k < N; k++) member(legP(i, lv[k]), legP(i, lv[k + 1]), 0.46 - 0.26 * (lv[k] / Ht), 10);
+}
+for (let k = 0; k <= N; k++) {
+  for (let i = 0; i < 3; i++) {
+    const j = (i + 1) % 3;
+    member(legP(i, lv[k]), legP(j, lv[k]), 0.13);
+    if (k < N) { member(legP(i, lv[k]), legP(j, lv[k + 1]), 0.095); member(legP(j, lv[k]), legP(i, lv[k + 1]), 0.095); }
+  }
+}
+// mast pole + platforms + panel antennas
+member(new THREE.Vector3(0, Ht - 6, 0), new THREE.Vector3(0, Ht + 15, 0), 0.32, 12);
+for (let i = 0; i < 3; i++) member(legP(i, Ht - 0.2), new THREE.Vector3(0, Ht + 4, 0), 0.09);
+function platform(y, out, panelsPerFace, ph) {
+  for (let i = 0; i < 3; i++) {
+    const j = (i + 1) % 3;
+    const a = legP(i, y), b = legP(j, y);
+    const n = a.clone().add(b).setY(0).normalize();
+    const a2 = a.clone().addScaledVector(n, out), b2 = b.clone().addScaledVector(n, out);
+    member(a2, b2, 0.12); member(a, a2, 0.1); member(b, b2, 0.1);
+    for (let k = 0; k < panelsPerFace; k++) {
+      const t = (k + 0.5) / panelsPerFace;
+      const p = a2.clone().lerp(b2, t).addScaledVector(n, 0.35); p.y += ph * 0.35;
+      box(0.9, ph, 0.32, p, -Math.atan2(n.z, n.x) + Math.PI / 2);
+    }
+  }
+}
+platform(Ht - 3, 1.2, 3, 3.6);
+platform(Ht - 17, 1.4, 2, 3.0);
+// microwave dishes (shallow paraboloids)
+function dish(y, legI, outDir, r) {
+  const pts = []; for (let i = 0; i <= 12; i++) { const x = (i / 12) * r; pts.push(new THREE.Vector2(x, x * x / (4 * r * 0.55))); }
+  const g = new THREE.LatheGeometry(pts, 40); g.rotateX(-Math.PI / 2);
+  const base = legP(legI, y); const n = base.clone().setY(0).normalize();
+  g.lookAt?.call; // (keep default orientation, then aim)
+  const m = new THREE.Matrix4().lookAt(new THREE.Vector3(), n.clone().multiplyScalar(-1).add(new THREE.Vector3(outDir, 0, 0)), up);
+  g.applyMatrix4(m); g.translate(base.x + n.x * 1.4, y, base.z + n.z * 1.4);
+  parts.push(g);
+  member(base, base.clone().addScaledVector(n, 1.2), 0.1);
+}
+platform(46, 1.2, 1, 2.6);
+const towerGeo = mergeGeometries(parts.map((g) => g.index ? g.toNonIndexed() : g));
+towerGeo.computeVertexNormals();
+
+// dim red studio for metal reflections
+const env = G.studioEnvironment(renderer, { key: 1.2, rim: 3, fill: 0.6, tint: new THREE.Color(1, 0.12, 0.08) });
+const steel = new THREE.MeshStandardMaterial({ color: "#6a6a72", metalness: 0.8, roughness: 0.42, envMap: env, envMapIntensity: num("envi", 0.35), side: THREE.DoubleSide });
+// depth + ground-fog falloff as premultiplied alpha, so the mast dissolves into the real backdrop
+steel.transparent = true; steel.premultipliedAlpha = true;
+steel.onBeforeCompile = (sh) => {
+  sh.uniforms.uDens = { value: num("dens", 0.0035) };
+  sh.uniforms.uHaze = { value: new THREE.Color("#8a1410") };
+  sh.uniforms.uGround = { value: new THREE.Vector2(num("g0", 6), num("g1", 26)) };
+  sh.vertexShader = "varying vec3 vWP;\n" + sh.vertexShader.replace("#include <fog_vertex>", "#include <fog_vertex>\n vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+  sh.fragmentShader = "varying vec3 vWP; uniform float uDens; uniform vec3 uHaze; uniform vec2 uGround;\n" + sh.fragmentShader.replace("#include <dithering_fragment>", `#include <dithering_fragment>
+    float fd = length(vWP - cameraPosition);
+    float f = 1.0 - exp(-pow(fd * uDens, 2.0));
+    float hf = 1.0 - smoothstep(uGround.x, uGround.y, vWP.y);
+    float a = (1.0 - f) * (1.0 - hf);
+    gl_FragColor = vec4(gl_FragColor.rgb * a + uHaze * f * 0.10 * (1.0 - hf), a);`);
+};
+const tower = new THREE.Mesh(towerGeo, steel);
+scene.add(tower);
+
+// lights: warm red flood from below-front, hard red rim from behind the head, beacon points
+scene.add(new THREE.AmbientLight("#3a0808", 0.25));
+const key = new THREE.PointLight("#ff6a3a", num("key", 2600), 0, 1.5); key.position.set(-20, -18, 70); scene.add(key);
+const rim = new THREE.DirectionalLight("#ff2a18", num("rim", 3.2)); rim.position.set(18, 95, -60); scene.add(rim);
+const rim2 = new THREE.DirectionalLight("#ff6040", num("rim2", 1.2)); rim2.position.set(-40, 50, -30); scene.add(rim2);
+const beacons = [new THREE.Vector3(0, Ht + 15.2, 0)];
+for (let i = 0; i < 3; i++) beacons.push(legP(i, Ht - 3).addScaledVector(legP(i, Ht - 3).setY(0).normalize(), 1.6));
+for (let i = 0; i < 3; i++) beacons.push(legP(i, 44).addScaledVector(legP(i, 44).setY(0).normalize(), 0.5));
+beacons.forEach((b, i) => { const L = new THREE.PointLight("#ff2a1a", i === 0 ? 500 : 140, 0, 2); L.position.copy(b); scene.add(L); });
+
+// beacon glows + star glints (additive billboards; no bloom pass, so the DOM UI is never touched)
+function streak(color, len, thick, intensity) {
+  const m = G.additive(new THREE.ShaderMaterial({ depthTest: false,
+    uniforms: { uC: { value: new THREE.Color(color).multiplyScalar(intensity) } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(0.,0.,0.,1.);
+      vec2 sc = vec2(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz)); mv.xy += position.xy * sc; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uC; varying vec2 vUv; void main(){ vec2 d = abs(vUv - .5) * 2.;
+      float a = exp(-d.y * d.y * 60.) * pow(1. - d.x, 3.); gl_FragColor = vec4(uC * a, 0.); }` }));
+  const s = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), m); s.scale.set(len, thick, 1); s.renderOrder = 11; return s;
+}
+beacons.forEach((b, i) => {
+  const big = i === 0, s = big ? 1 : i < 4 ? 0.62 : 0.5;
+  const add = (o) => { o.position.copy(b); scene.add(o); };
+  add(G.glow("#ff1a10", 16 * s, 0.32));
+  add(G.glow("#ff4a30", 5 * s, 0.9));
+  add(G.glow("#ffd8cc", 1.3 * s, 1.8));
+  add(streak("#ffb0a0", 30 * s, 1.0 * s, 0.9));
+  const v = streak("#ffb0a0", 20 * s, 1.0 * s, 0.7); v.rotation.z = Math.PI / 2; add(v);
+});
+// volumetric halo around the head
+const halo = G.glow("#b0101a", 110, 0.22); halo.position.set(0, Ht + 4, -10); scene.add(halo);
+
+renderer.render(scene, cam);
+const proj = (v) => { const p = v.clone().project(cam); return [Math.round((p.x + 1) / 2 * S.W), Math.round((1 - p.y) / 2 * S.H)]; };
+console.log("top", proj(beacons[0]), "base", proj(new THREE.Vector3(0, 0, 0)), "y20", proj(new THREE.Vector3(0, 20, 0)));
+
+// fog wisps in front of the mast, then grain over the whole scene
+S.fogOverlay(stage, { color: "#8a1c1a", amount: 0.5, scale: 1.6, seed: 3.3, y0: 0.9, y1: 2.2, z: 9, stretch: 3.4 });
+S.fogOverlay(stage, { color: "#4e0c10", amount: 0.85, scale: 2.4, seed: 7.1, y0: 1.25, y1: 2.2, z: 9, stretch: 2.2 });
+el("div", { class: "abs", style: { left: 0, top: LY.fog + "px", width: "1260px", height: S.H - LY.fog + "px", zIndex: 9,
+  background: "linear-gradient(180deg, rgba(20,3,6,0) 0%, rgba(20,3,6,0.55) 45%, rgba(10,2,4,0.92) 100%)" } }, stage);
+S.grain(stage, { z: 12, amount: 0.09 });
+
+S.titleBlock(stage, { eyebrow: "Keep watch", ebColor: C.yellow,
+  lines: ["Monitors With Push Alerts"], sub: ["Health and propagation monitors, with", "the evidence from previous checks."],
+  subColor: "rgba(255,190,200,0.72)", size: S.TM().size * 0.94 });
+
+// ---- card stack, re-typeset from the monitor detail capture (03-monitors) ----
+const shadow = "0 60px 110px -30px rgba(0,0,0,0.75), 0 18px 40px -12px rgba(0,0,0,0.5)";
+const ico = (d) => `<svg viewBox="0 0 64 64" width="62" height="62" fill="none" stroke="#fff" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const envelope = ico('<rect x="7" y="14" width="50" height="36" rx="7"/><path d="M9 18l23 17 23-17"/>');
+const clock = ico('<circle cx="32" cy="32" r="24"/><path d="M32 19v14l9 6"/>');
+const Z = LY.z || 1, sec = D.secs;
+const stackBox = el("div", { class: "abs", style: { left: 0, top: 0, zoom: Z, zIndex: 30 } }, stage);
+const Y0 = LY.Y0 / Z, X = LY.sx / Z, Wd = LY.sw;
+const back = S.glass(stackBox, { x: X + 88, y: Y0, w: Wd - 176, tone: "rgba(74,36,36,0.55)", z: 29, style: { height: "220px", boxShadow: shadow },
+  head: { title: "example.com", meta: `<span style="color:${C.green}">Active</span>&nbsp;· Checks every 1h`, metaColor: C.gray } });
+const mid = S.glass(stackBox, { x: X + 42, y: Y0 + 128, w: Wd - 84, tone: "rgba(70,32,32,0.60)", z: 30, style: { boxShadow: shadow },
+  rows: [{ icon: envelope, title: "Email authentication", sub: "Score 85/100 · SPF, DKIM, DMARC and MX" }] });
+const midH = mid.offsetHeight; mid.style.height = midH + 70 + "px";
+S.glass(stackBox, { x: X, y: Y0 + 128 + midH, w: Wd, tone: "rgba(66,26,26,0.64)", z: 31, style: { boxShadow: shadow },
+  head: { title: "Check history", meta: Wd > 900 ? "Latest 100 checks retained" : "", metaColor: C.gray },
+  rows: [
+    { icon: clock, title: `Sep 9, 2026 · 18:10:${sec}`, sub: "View saved check results" },
+    { icon: clock, title: `Sep 9, 2026 · 17:10:${sec}`, sub: "View saved check results" },
+  ] });
+
+S.ready();
+</script>
+</body></html>

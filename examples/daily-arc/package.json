@@ -1,0 +1,6 @@
+{
+  "name": "shotsmith-example-daily-arc",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node ../../dist/cli.js build" }
+}

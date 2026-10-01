@@ -1,5 +1,6 @@
 import type { FormFactor, Platform, Store } from "../config/targets.js";
 import type { KitContext } from "../shared/context.js";
+import { href } from "./device.js";
 import { LOGICAL_WIDTH, state } from "./runtime.js";
 
 export interface Stage {
@@ -9,14 +10,17 @@ export interface Stage {
 }
 
 function fontCss(c: KitContext): string {
-  const faces = Object.values(c.fonts).flatMap((f) => f.faces.map((face) => `@font-face{font-family:"${f.family}";font-weight:${face.weight};src:url("${face.url}")}`));
+  const faces = Object.values(c.fonts).flatMap((f) => f.faces.map((face) => `@font-face{font-family:"${f.family}";font-weight:${face.weight};src:url("${href(face.url)}")}`));
   const vars = Object.entries(c.fonts).map(([role, f]) => `--font-${role}:"${f.family}"`).join(";");
   return `${faces.join("\n")}\n:root{${vars}}`;
 }
 
 async function loadFonts(c: KitContext): Promise<void> {
   for (const f of Object.values(c.fonts)) for (const face of f.faces) {
-    const loaded = await document.fonts.load(`${face.weight.split(" ")[0]} 40px "${f.family}"`);
+    // A file the browser cannot decode (an HTML error page saved as .ttf, a truncated download) rejects with a bare NetworkError.
+    const loaded = await document.fonts.load(`${face.weight.split(" ")[0]} 40px "${f.family}"`).catch(() => {
+      throw new Error(`Font "${f.family}" (${face.url}) could not be decoded (corrupt or unsupported format)`);
+    });
     if (!loaded.length) throw new Error(`Font "${f.family}" (${face.url}) failed to load`);
   }
 }

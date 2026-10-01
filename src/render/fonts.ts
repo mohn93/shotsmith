@@ -35,15 +35,17 @@ export function fontFileForUrl(root: string, url: string): string | null {
 export interface GlyphSource { hasGlyphForCodePoint(codePoint: number): boolean }
 export type GlyphCache = Map<string, GlyphSource[]>;
 
-// Opens a font file once per cache; a collection yields each of its fonts. Unreadable files yield none.
-export function openGlyphSources(file: string, cache: GlyphCache): GlyphSource[] {
+// Opens a font file once per cache; a collection yields each of its fonts. An unreadable file yields none and is
+// reported through onError the first time it is opened.
+export function openGlyphSources(file: string, cache: GlyphCache, onError?: (file: string, e: Error) => void): GlyphSource[] {
   let fonts = cache.get(file);
   if (!fonts) {
     try {
       const f = fontkit.openSync(file);
       fonts = "fonts" in f ? f.fonts : [f];
-    } catch {
+    } catch (e) {
       fonts = [];
+      onError?.(file, e as Error);
     }
     cache.set(file, fonts);
   }

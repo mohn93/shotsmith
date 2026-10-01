@@ -1,0 +1,14 @@
+@font-face { font-family: "Inter"; font-weight: 400; src: url(/fonts/Inter-Regular.ttf); }
+@font-face { font-family: "Inter"; font-weight: 700; src: url(/fonts/Inter-Bold.ttf); }
+@font-face { font-family: "Inter"; font-weight: 800; src: url(/fonts/Inter-ExtraBold.ttf); }
+html, body { margin: 0; width: 1260px; height: 2736px; overflow: hidden; background: #02040a; }
+#stage { position: absolute; inset: 0; }
+#stage canvas { display: block; width: 1260px !important; height: 2736px !important; }
+.copy { position: absolute; left: 0; right: 0; text-align: center; color: #fff; font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; font-feature-settings: "ss01", "cv11"; }
+.eyebrow { font-weight: 700; font-size: 34px; letter-spacing: 0.16em; text-transform: uppercase; color: #7fa6ff; margin-bottom: 34px; }
+.eyebrow i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #10B981; margin-right: 16px; vertical-align: 4px; box-shadow: 0 0 18px 4px rgba(16,185,129,.7); font-style: normal; }
+h1 { margin: 0; font-weight: 800; font-size: 118px; line-height: 1.0; letter-spacing: -0.045em; }
+h1 .accent { background: linear-gradient(95deg, #34d399 0%, #10B981 35%, #3b82f6 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+h1 .accent-blue { background: linear-gradient(95deg, #93c5fd 0%, #3b82f6 55%, #2563EB 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+p.sub { margin: 36px auto 0; width: 900px; font-weight: 400; font-size: 42px; line-height: 1.32; letter-spacing: -0.012em; color: rgba(214, 224, 245, 0.72); }

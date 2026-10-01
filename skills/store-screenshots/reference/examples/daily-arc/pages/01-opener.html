@@ -1,0 +1,74 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, lift, ready } from "shotsmith/kit";
+import { C, title, blockShadow, lineBoxes, svgLayer, s, arcPath, sparkle, sun, squiggle } from "./system.js";
+
+const st = await stage();
+st.root.style.background = C.sunshine;
+const L = st.pick({
+  tall: { y: 150, size: 176, subSize: 54, subGap: 44, subWidth: 900, sw: 760, py: 1300, block: 34 },
+  p916: { y: 120, size: 150, subSize: 46, subGap: 36, subWidth: 800, sw: 640, py: 1054, block: 28 },
+});
+const f = L.sw / 760;   // the art scales with the phone
+
+// ---- copy ----
+const tt = await title(st, "opener.headline", { y: L.y, size: L.size, sub: "opener.subline", subSize: L.subSize, subGap: L.subGap, subWidth: L.subWidth });
+
+// ---- phone (status bar repainted as a clean 9:41 bar), placed so the gauge clears the subline ----
+const R = 520 * f, SWD = 84 * f, EDGE = 12 * f, CY = 225 * f;
+const py = Math.max(L.py, tt.bottom + 70 + R + SWD / 2 - CY);
+const px = (st.W - L.sw) / 2;
+const d = await device({ capture: "daily-home", x: px, y: py, width: L.sw, repaint: true, shadow: false, z: 10 });
+blockShadow(st, d, { dy: L.block, color: C.sunshineShade });
+
+// ---- art behind the phone: a 4-of-5 progress gauge, a half ring that clears the phone's top corners ----
+const bg = svgLayer(st, 2);
+const cx = 630, cy = py + CY;
+const A0 = -90, A1 = 90, STEP = (A1 - A0) / 5, FILL = A0 + STEP * 4, GAP = 2.4;
+const layer = (y, done, todo) => {
+  for (let i = 0; i < 5; i++) {
+    const a = A0 + i * STEP + (i ? GAP / 2 : 0), b = A0 + (i + 1) * STEP - (i < 4 ? GAP / 2 : 0);
+    s("path", { d: arcPath(cx, y, R, a, b), fill: "none", stroke: i < 4 ? done : todo, "stroke-width": SWD }, bg);
+  }
+  s("circle", { cx: cx - R, cy: y, r: SWD / 2, fill: done }, bg);
+  s("circle", { cx: cx + R, cy: y, r: SWD / 2, fill: todo }, bg);
+};
+layer(cy + EDGE, C.greenDeep, C.mintEdge);   // flat 3D edge
+layer(cy, C.green, C.mint);
+{ // check knob on the last finished step
+  const a = (FILL - STEP / 2) * Math.PI / 180, kx = cx + R * Math.sin(a), ky = cy - R * Math.cos(a), kr = 30 * f;
+  s("circle", { cx: kx, cy: ky + 8 * f, r: kr, fill: C.greenDeep }, bg);
+  s("circle", { cx: kx, cy: ky, r: kr, fill: C.white }, bg);
+  s("path", { d: `M${kx - 13 * f} ${ky + f} l${9 * f} ${9 * f} l${17 * f} ${-19 * f}`, fill: "none", stroke: C.green, "stroke-width": 8 * f, "stroke-linecap": "round", "stroke-linejoin": "round" }, bg);
+}
+
+// ---- the "Today at a glance" card, lifted and tipped; its source region is filled with the capture background ----
+const region = st.pick({ tall: [72, 558, 1098, 1146], p916: [91, 520, 988, 1034] });
+const radius = st.pick({ tall: 66, p916: 58 });
+const [mx, my] = d.toStage((region[0] + region[2]) / 2, (region[1] + region[3]) / 2);
+const card = lift(d, { region, mode: "recess", at: [mx, my - 14 * f], scale: 1.12, radius, z: 20,
+  shadow: `0 ${16 * f}px 0 ${C.mintEdge}, 0 50px 70px -34px rgba(20,60,50,0.40), 0 20px 30px -18px rgba(20,60,50,0.25)` });
+card.style.transform = "rotate(-2.5deg)";
+
+// ---- ornaments ----
+const fg = svgLayer(st, 30);
+const hl = lineBoxes(st, tt.h), last = hl.at(-1);
+squiggle(fg, last.l + 8, last.b + 2, Math.min(last.r - last.l - 16, 600 * f), 24 * f, C.green, 20 * f);
+// The sun sits beside the first headline line, or else beside the subline, where its rays clear every line of text
+// (translations differ in length). RR is the rays' reach including their round caps; line boxes are the font's content
+// area, which already leaves the descender space around the letters, so a 2 px margin is enough. No room: no sun.
+const SR = 58 * f, RR = SR * 2.05, PAD = 2;
+const sub = lineBoxes(st, tt.p), text = [...hl, ...sub];
+const spots = [...hl.map((b) => [Math.max(1060, b.r + 90 + SR * 1.9), (b.t + b.b) / 2]),
+  [Math.max(1060, Math.max(...sub.map((b) => b.r)) + 90 + SR * 1.9), (sub[0].t + sub.at(-1).b) / 2]];
+const away = ([x, y], b) => Math.hypot(Math.max(b.l - x, 0, x - b.r), Math.max(b.t - y, 0, y - b.b));
+const spot = spots.find((p) => p[0] + RR <= st.W - 30 && text.every((b) => away(p, b) >= RR + PAD));
+if (spot) sun(fg, spot[0], spot[1], SR, C.sunOrange, C.sunBrown);
+const sunY = spot ? spot[1] : Infinity;
+if (sunY < py - 760 * f) sparkle(fg, 1120, py - 600 * f, 58 * f, C.white);
+sparkle(fg, 1150, py - 330 * f, 30 * f, C.white);
+sparkle(fg, 110, py - 230 * f, 34 * f, C.white);
+s("circle", { cx: 1175, cy: py - 210 * f, r: 20 * f, fill: "none", stroke: C.white, "stroke-width": 12 * f }, fg);
+
+await ready();
+</script></body></html>

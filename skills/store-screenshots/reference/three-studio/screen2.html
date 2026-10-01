@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/","gsap":"/node_modules/gsap/index.js"}}</script>
+</head><body>
+<div id="stage"></div>
+<div class="copy" style="top:176px">
+  <div class="eyebrow"><i style="background:#f59e0b;box-shadow:0 0 18px 4px rgba(245,158,11,.7)"></i>Mail diagnostics</div>
+  <h1>Fix email before<br><span class="accent-blue">it bounces.</span></h1>
+  <p class="sub">SMTP, reverse DNS, TLS, open relay and blacklists, tested in one tap.</p>
+</div>
+<script type="module">
+import * as THREE from "three";
+import * as L from "./lib.js";
+const { deg } = L;
+
+const renderer = L.createRenderer({ pixelRatio: 2 });
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(22, L.W / L.H, 1, 400);
+camera.position.set(0, 0, 64);
+camera.lookAt(0, 0, 0);
+
+const env = L.studioEnvironment(renderer);
+const tex = await L.loadTexture(renderer, "/inputs/2.png");
+
+scene.add(L.backgroundQuad({
+  top: "#0a1230", bottom: "#010208",
+  glows: [
+    { uv: [0.35, 0.45], radius: 0.5, color: "#1d4ed8", intensity: 0.2 },
+    { uv: [0.9, 0.6], radius: 0.3, color: "#10b981", intensity: 0.2 },
+    { uv: [0.85, 0.32], radius: 0.28, color: "#f59e0b", intensity: 0.17 },
+  ],
+}));
+
+// ---- phone ----
+const phone = L.makePhone(tex, env, { frame: "#a39e96", frameRough: 0.34, glare: 0.12 });
+phone.position.set(-2.2, -3.6, -4);
+phone.rotation.set(deg(4), deg(26), deg(-2));
+scene.add(phone);
+const front = phone.userData.front;
+
+// ---- lifted diagnostic rows (real pixels) ----
+const glowTex = L.canvasTexture(256, 256, (ctx, w, h) => {
+  const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  g.addColorStop(0, "#fff"); g.addColorStop(0.4, "#666"); g.addColorStop(1, "#000");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+}, { srgb: false });
+const rows = [
+  { y: 1540, h: 200, glow: "#10b981", pos: [1.15, 2.6, 5.0], rot: [3, -7, 0], w: 7.0 },     // DNS Resolution
+  { y: 1786, h: 216, glow: "#10b981", pos: [1.0, -0.35, 7.0], rot: [2, -7, 0], w: 7.0 },     // Reverse DNS (PTR)
+  { y: 2038, h: 306, glow: "#f59e0b", pos: [0.8, -3.5, 9.0], rot: [1, -7, 0], w: 7.0 },      // PTR matches hostname (warning)
+];
+for (const r of rows) {
+  const crop = { x: 150, y: r.y, w: 2000, h: r.h };
+  const tile = L.liftedCard(tex, crop, r.w, { radiusPx: 56, thickness: 0.18, envMap: env, edge: r.glow, edgeEmissive: r.glow, edgeEmissiveIntensity: 2.2 });
+  tile.position.set(...r.pos);
+  tile.rotation.set(deg(r.rot[0]), deg(r.rot[1]), deg(r.rot[2]));
+  scene.add(tile);
+  const sh = L.shadowMesh(tile.userData.w, tile.userData.h, { opacity: 0.6, blur: 0.2 });
+  sh.position.set(r.pos[0] + 0.2, r.pos[1] - 0.45, r.pos[2] - 0.9); sh.rotation.copy(tile.rotation); sh.scale.setScalar(1.04);
+  scene.add(sh);
+
+}
+
+// ---- 3D status tokens ----
+const ok = L.checkToken(env, { r: 1.15 });
+ok.position.set(3.7, 4.55, 2.0); ok.rotation.set(deg(12), deg(-28), deg(-8));
+scene.add(ok);
+const okSh = L.shadowMesh(2.3, 2.3, { opacity: 0.35, blur: 0.35, radius: 1.15 }); okSh.position.set(3.85, 4.15, 0.6); scene.add(okSh);
+const warn = L.warnToken(env, { s: 2.5 });
+warn.position.set(3.45, -6.3, 7.0); warn.rotation.set(deg(-10), deg(-24), deg(6));
+scene.add(warn);
+
+const composer = L.createComposer(renderer, scene, camera, { bloom: { strength: 0.5, radius: 0.55, threshold: 1.02 } });
+await L.fontsReady(["800 100px Inter", "400 40px Inter", "700 30px Inter"]);
+composer.render();
+window.__ready = true;
+</script>
+</body></html>
