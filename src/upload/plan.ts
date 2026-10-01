@@ -5,7 +5,7 @@ import type { ResolvedConfig } from "../config/schema.js";
 import type { Store } from "./local.js";
 import { SERVICE_NAME, rel, sha256 } from "./util.js";
 
-export type RemoveReason = "superseded" | "failed" | "processing" | "duplicate" | "replaced";
+export type RemoveReason = "superseded" | "failed" | "processing" | "unfinished" | "duplicate" | "replaced";
 export interface PlannedSet {
   locale: string;
   storeLocale: string;
@@ -47,7 +47,7 @@ export interface UploadReport {
 }
 
 type PlanBody = Omit<UploadPlan, "createdAt" | "digest">;
-const REASONS: RemoveReason[] = ["superseded", "failed", "processing", "duplicate", "replaced"];
+const REASONS: RemoveReason[] = ["superseded", "failed", "processing", "unfinished", "duplicate", "replaced"];
 
 // What would change, without remote ids (Play hands out new ones per edit) or the time.
 export function planDigest(p: PlanBody): string {
@@ -104,6 +104,16 @@ export function readPlan(cfg: ResolvedConfig, store: Store): UploadPlan | null {
   }
 }
 
+// The report of the last apply, or null when there is none or it cannot be read.
+export function readReport(cfg: ResolvedConfig, store: Store): UploadReport | null {
+  try {
+    const r = JSON.parse(fs.readFileSync(reportPath(cfg, store), "utf8"));
+    return r && r.store === store && (r.editId === null || typeof r.editId === "string") ? r : null;
+  } catch {
+    return null;
+  }
+}
+
 const noPlan = (cfg: ResolvedConfig, store: Store) => new Error(`No saved plan at ${rel(cfg, planPath(cfg, store))}. Run shotsmith upload ${store} without --apply, show the plan to the user, and apply only after they confirm`);
 
 export function requirePlan(cfg: ResolvedConfig, store: Store): UploadPlan {
@@ -139,7 +149,7 @@ export function describePlan(p: UploadPlan): string[] {
 
 const describeApplied = (s: AppliedSet): string =>
   s.status === "unchanged" ? "unchanged"
-    : s.status === "discarded" ? "discarded with the draft edit (listing unchanged)"
+    : s.status === "discarded" ? "not applied; the Google Play listing is unchanged"
     : s.status === "failed" ? `failed after deleting ${s.deleted.length} and uploading ${s.uploaded.length}`
     : `deleted ${s.deleted.length}, uploaded ${s.uploaded.length}, ${s.order.length} in order and verified`;
 

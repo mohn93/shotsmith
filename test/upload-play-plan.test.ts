@@ -37,6 +37,16 @@ describe("planPlay", () => {
     expect(fake.writes()).toEqual([`POST ${EDITS}`, `DELETE ${EDITS}/1001`]);
   });
 
+  it("logs a planning edit it cannot delete, and still returns the plan", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakePlay();
+    fake.failDeleteEdit = true;
+    const lines: string[] = [];
+    const plan = await planPlay(cfg, (await localSets(cfg, "play")).sets, { ...deps(fake), log: (l) => lines.push(l) });
+    expect(plan.problems).toEqual([]);
+    expect(lines).toEqual(["could not delete planning edit 1001; it expires on its own"]);
+  });
+
   it("plans both tablet slots from one set of images", async () => {
     const cfg = await uploadWorkspace({ targets: ["android-tablet"] });
     const plan = await planPlay(cfg, (await localSets(cfg, "play")).sets, deps(new FakePlay()));

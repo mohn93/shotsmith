@@ -42,6 +42,12 @@ describe("planAppleSet", () => {
     expect(s.upload.map((u) => u.checksum)).toEqual(["b", "c"]);
   });
 
+  it("calls a reservation that never finished uploading unfinished, and a stuck one processing", () => {
+    const s = planAppleSet(local(["a"]), [remote("1", "a", "AWAITING_UPLOAD"), remote("2", null, "AWAITING_UPLOAD"), remote("3", "a", "UPLOAD_COMPLETE")]);
+    expect(s.remove.map((r) => [r.id, r.reason])).toEqual([["1", "unfinished"], ["2", "unfinished"], ["3", "processing"]]);
+    expect(s.upload.map((u) => u.checksum)).toEqual(["a"]);
+  });
+
   it("needs one remote screenshot per page when two pages are identical", () => {
     const s = planAppleSet(local(["a", "a"]), [remote("1", "a")]);
     expect(s.keep.map((k) => k.id)).toEqual(["1"]);

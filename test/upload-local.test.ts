@@ -149,14 +149,14 @@ describe("plans", () => {
   });
 
   it("describes a plan and a report", () => {
-    const named = set({ storeLocale: "fr-FR", remove: [{ id: "5", checksum: "x", reason: "superseded", fileName: "old-01.jpg" }, { id: "6", checksum: null, reason: "failed", fileName: null }, { id: "7", checksum: "y", reason: "duplicate", fileName: "old-02.jpg" }] });
+    const named = set({ storeLocale: "fr-FR", remove: [{ id: "5", checksum: "x", reason: "superseded", fileName: "old-01.jpg" }, { id: "6", checksum: null, reason: "failed", fileName: null }, { id: "7", checksum: "y", reason: "duplicate", fileName: "old-02.jpg" }, { id: "8", checksum: null, reason: "unfinished", fileName: null }] });
     const plan = makePlan({ ...base, sets: [set(), set({ storeLocale: "de-DE", status: "unchanged", remove: [], upload: [] }), named], problems: ["something"] });
     expect(describePlan(plan)).toEqual([
       "App Store Connect plan for com.example.demo, version 1.1",
       "en-US iphone-6.9 (APP_IPHONE_67): keep 1, delete 1 (1 superseded), upload 1",
       "  order: 01-a.jpg, 02-b.jpg",
       "de-DE iphone-6.9 (APP_IPHONE_67): unchanged",
-      "fr-FR iphone-6.9 (APP_IPHONE_67): keep 1, delete 3 (1 superseded, 1 failed, 1 duplicate), upload 1",
+      "fr-FR iphone-6.9 (APP_IPHONE_67): keep 1, delete 4 (1 superseded, 1 failed, 1 unfinished, 1 duplicate), upload 1",
       "  delete: old-01.jpg, old-02.jpg",
       "  order: 01-a.jpg, 02-b.jpg",
       "problem: something",
@@ -170,6 +170,6 @@ describe("plans", () => {
         { ...head, storeLocale: "fr-FR", status: "failed", deleted: ["9"], uploaded: [{ file: "f", id: "3" }, { file: "g", id: "4" }], order: [] },
         { ...head, storeLocale: "es-ES", status: "discarded", deleted: [], uploaded: [{ file: "f", id: "5" }], order: [] },
       ],
-    })).toEqual(["en-US iphone-6.9 (APP_IPHONE_67): deleted 1, uploaded 1, 2 in order and verified", "de-DE iphone-6.9 (APP_IPHONE_67): unchanged", "fr-FR iphone-6.9 (APP_IPHONE_67): failed after deleting 1 and uploading 2", "es-ES iphone-6.9 (APP_IPHONE_67): discarded with the draft edit (listing unchanged)"]);
+    })).toEqual(["en-US iphone-6.9 (APP_IPHONE_67): deleted 1, uploaded 1, 2 in order and verified", "de-DE iphone-6.9 (APP_IPHONE_67): unchanged", "fr-FR iphone-6.9 (APP_IPHONE_67): failed after deleting 1 and uploading 2", "es-ES iphone-6.9 (APP_IPHONE_67): not applied; the Google Play listing is unchanged"]);
   });
 });

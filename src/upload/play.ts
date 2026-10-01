@@ -2,8 +2,8 @@ import fs from "node:fs";
 import type { ResolvedConfig } from "../config/schema.js";
 import { type Method, StoreError, type Transport, parseBody } from "./http.js";
 import type { LocalSet } from "./local.js";
-import { type AppliedSet, type PlannedSet, type UploadPlan, type UploadReport, makePlan, samePlan } from "./plan.js";
-import { sha256 } from "./util.js";
+import { type AppliedSet, type PlannedSet, type UploadPlan, type UploadReport, makePlan, readReport, reportPath, samePlan } from "./plan.js";
+import { rel, sha256 } from "./util.js";
 
 export const PLAY_API = "https://androidpublisher.googleapis.com";
 export interface PlayDeps { transport: Transport; token: () => Promise<string>; log?: (line: string) => void; now?: () => number }
@@ -40,12 +40,15 @@ export class PlayClient {
     return ((await this.request("GET", this.slot(edit, lang, slot))).images ?? []).map((i: Json) => ({ id: String(i.id), sha256: i.sha256 ?? null }));
   }
   async clear(edit: string, lang: string, slot: string): Promise<void> { await this.request("DELETE", this.slot(edit, lang, slot)); }
-  async upload(edit: string, lang: string, slot: string, bytes: Uint8Array): Promise<PlayImage> {
+  // The id is null when Google's answer has none.
+  async upload(edit: string, lang: string, slot: string, bytes: Uint8Array): Promise<{ id: string | null; sha256: string | null }> {
     const d = await this.request("POST", `${this.uploadApi}/${edit}/listings/${encodeURIComponent(lang)}/${slot}?uploadType=media`, bytes, "image/jpeg");
-    return { id: String(d.image?.id), sha256: d.image?.sha256 ?? null };
+    return { id: d.image?.id == null ? null : String(d.image.id), sha256: d.image?.sha256 ?? null };
   }
   async validate(edit: string): Promise<void> { await this.request("POST", `${this.api}/${edit}:validate`); }
-  async commit(edit: string): Promise<void> { await this.request("POST", `${this.api}/${edit}:commit`); }
+  async commit(edit: string, o: { notSentForReview?: boolean } = {}): Promise<void> {
+    await this.request("POST", `${this.api}/${edit}:commit${o.notSentForReview ? "?changesNotSentForReview=true" : ""}`);
+  }
 }
 
 function playMessage(method: string, url: string, status: number, data: Json): string {
@@ -100,7 +103,8 @@ export async function planPlay(cfg: ResolvedConfig, local: LocalSet[], deps: Pla
     const { pairs, problems } = await readPlay(c, edit, local);
     return makePlan({ store: "play", app: pkg, version: null, sets: pairs.map((p) => p.plan), problems }, new Date(deps.now?.() ?? Date.now()));
   } finally {
-    await c.deleteEdit(edit).catch(() => {});
+    const log = deps.log ?? (() => {});
+    await c.deleteEdit(edit).catch(() => log(`could not delete planning edit ${edit}; it expires on its own`));
   }
 }
 
@@ -175,6 +179,7 @@ async function applyPlaySet(c: PlayClient, edit: string, { plan: p, local }: Pla
       const bytes = fs.readFileSync(f.file);
       if (sha256(bytes) !== f.sha256) throw new Error(`${f.rel} changed after the plan was made; run the plan again`);
       const image = await c.upload(edit, p.storeLocale, p.slot, bytes);
+      if (image.id === null) throw new Error(`Google Play returned no image id for ${f.rel}`);
       if (image.sha256 !== null && image.sha256 !== f.sha256) throw new Error(`Google Play stored ${f.rel} with a different checksum`);
       rec.uploaded.push({ file: f.rel, id: image.id });
       log(`${where}: uploaded ${f.rel}`);
@@ -188,19 +193,37 @@ async function applyPlaySet(c: PlayClient, edit: string, { plan: p, local }: Pla
   }
 }
 
-export async function commitPlay(cfg: ResolvedConfig, editId: string, deps: PlayDeps): Promise<{ editId: string; lines: string[] }> {
+// The edit id must be a Play edit id and, when the last apply left a report, the edit that report names.
+export function checkCommit(cfg: ResolvedConfig, editId: string): void {
   checkEditId(editId);
+  const staged = readReport(cfg, "play")?.editId;
+  if (staged && staged !== editId) {
+    throw new Error(`The last --apply staged edit ${staged}, not ${editId}. Commit ${staged}, or delete ${rel(cfg, reportPath(cfg, "play"))} first to commit a different edit`);
+  }
+}
+
+const NEEDS_MANUAL_REVIEW = /changes cannot be sent for review automatically/i;
+
+export async function commitPlay(cfg: ResolvedConfig, editId: string, o: { notSentForReview?: boolean }, deps: PlayDeps): Promise<{ editId: string; lines: string[] }> {
+  checkCommit(cfg, editId);
   const c = new PlayClient(deps, playPackage(cfg));
   try {
-    await c.commit(editId);
+    await c.commit(editId, o);
   } catch (e) {
     if (e instanceof StoreError && (e.status === 404 || /edit has been deleted/i.test(e.message))) {
       throw new Error(`Google Play no longer has edit ${editId}: an edit is discarded when anything else changes the app first, or when it expires, or it was already committed (check Play Console). Run shotsmith upload play --apply again, show the user the result, and commit the new edit`);
+    }
+    if (e instanceof StoreError && e.status === 400 && !o.notSentForReview && NEEDS_MANUAL_REVIEW.test(e.message)) {
+      throw new Error(`Google Play will not send these changes for review automatically. Run shotsmith upload play --commit ${editId} --changes-not-sent-for-review after the user confirms, then send them for review in Play Console.`);
     }
     throw e;
   }
   return {
     editId,
-    lines: [`Committed edit ${editId}.`, "If managed publishing is on for this app, the changes now wait in Publishing overview in Play Console until someone publishes them."],
+    lines: [
+      `Committed edit ${editId}.`,
+      ...(o.notSentForReview ? ["The changes were not sent for review; send them for review in Play Console."] : []),
+      "If managed publishing is on for this app, the changes now wait in Publishing overview in Play Console until someone publishes them.",
+    ],
   };
 }

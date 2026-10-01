@@ -26,9 +26,10 @@ export function registerUpload(program: Command) {
     .option("-l, --locale <codes>", "limit to locales (repeat or comma-separate)", list)
     .option("--apply", "stage the planned changes in a validated draft edit; only after the user confirms the plan")
     .option("--commit <editId>", "publish a staged edit; only after the user confirms")
+    .option("--changes-not-sent-for-review", "with --commit: commit without sending the changes for review, when Google will not send them automatically")
     .action(async (o, cmd: Command) => {
       const g = globals(cmd);
       const cfg = loadConfig(g.cwd);
-      print(await runPlay(cfg, { locales: o.locale, apply: !!o.apply, commit: o.commit }, () => playDeps(cfg.root, { json: g.json })), g.json);
+      print(await runPlay(cfg, { locales: o.locale, apply: !!o.apply, commit: o.commit, notSentForReview: !!o.changesNotSentForReview }, () => playDeps(cfg.root, { json: g.json })), g.json);
     });
 }

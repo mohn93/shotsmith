@@ -153,6 +153,27 @@ describe("runPlay", () => {
     expect((await runPlay(cfg, { apply: true }, play(fake))).lines.at(-1)).toBe("Nothing to change; no edit was kept.");
   });
 
+  it("commits only the edit the last apply staged, and refuses another before connecting", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakePlay();
+    await runPlay(cfg, {}, play(fake));
+    await runPlay(cfg, { apply: true }, play(fake));
+    expect(JSON.parse(fs.readFileSync(reportPath(cfg, "play"), "utf8")).editId).toBe("1002");
+    await expect(runPlay(cfg, { commit: "1001" }, never)).rejects.toThrow(/last --apply staged edit 1002, not 1001/);
+    await expect(runPlay(cfg, { commit: "1002" }, play(fake))).resolves.toMatchObject({ ok: true, json: { committed: "1002" } });
+  });
+
+  it("passes --changes-not-sent-for-review to the commit, and only with --commit", async () => {
+    const cfg = await uploadWorkspace({ export: false });
+    const fake = new FakePlay();
+    fake.needsManualReview = true;
+    fake.edits.set("1002", new Map([["en-US", new Map()]]));
+    await expect(runPlay(cfg, { commit: "1002" }, play(fake))).rejects.toThrow(/will not send these changes for review automatically.*--commit 1002 --changes-not-sent-for-review/);
+    await expect(runPlay(cfg, { commit: "1002", notSentForReview: true }, play(fake))).resolves.toMatchObject({ ok: true, json: { committed: "1002" } });
+    await expect(runPlay(cfg, { notSentForReview: true }, never)).rejects.toThrow(/--changes-not-sent-for-review only applies to --commit/);
+    await expect(runPlay(cfg, { apply: true, notSentForReview: true }, never)).rejects.toThrow(/--changes-not-sent-for-review only applies to --commit/);
+  });
+
   it("rejects --apply with --commit, and a bad edit id, before connecting", async () => {
     const cfg = await uploadWorkspace();
     await expect(runPlay(cfg, { apply: true, commit: "1" }, never)).rejects.toThrow(/either --apply or --commit/);

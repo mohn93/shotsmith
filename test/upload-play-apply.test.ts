@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type LocalSet, localSets } from "../src/upload/local.js";
+import { reportPath, writeJson } from "../src/upload/plan.js";
 import { type PlayDeps, PlayClient, applyPlay, commitPlay, planPlay } from "../src/upload/play.js";
 import { FakePlay } from "./upload/fake-play.js";
 import { type WorkspaceOptions, uploadWorkspace } from "./upload/workspace.js";
@@ -87,6 +88,16 @@ describe("applyPlay", () => {
     expect(fake.live.get("en-US")!.get("phoneScreenshots") ?? []).toEqual([]);
   });
 
+  it("fails when Google answers an upload without an image id", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    fake.noImageId = true;
+    const report = await applyPlay(cfg, sets, plan, deps(fake));
+    expect(report.ok).toBe(false);
+    expect(report.error).toMatch(/en-US phoneScreenshots: Google Play returned no image id for export\/en\/android-phone\/01-a\.jpg/);
+    expect(report.error).not.toContain("undefined");
+    expect(fake.edits.size).toBe(0);
+  });
+
   it("fails when the edit's listing differs from the export after the upload", async () => {
     const { cfg, sets, fake, plan } = await planned();
     fake.dropLastImage = true;
@@ -120,28 +131,62 @@ describe("commitPlay", () => {
   it("commits a staged edit and notes managed publishing", async () => {
     const { cfg, sets, fake, plan } = await planned();
     const report = await applyPlay(cfg, sets, plan, deps(fake));
-    const res = await commitPlay(cfg, report.editId!, deps(fake));
+    const res = await commitPlay(cfg, report.editId!, {}, deps(fake));
     expect(res.editId).toBe(report.editId);
     expect(res.lines.join("\n")).toMatch(/Committed edit 1002\..*Publishing overview/s);
     expect(fake.shas("de-DE", "phoneScreenshots")).toEqual(sets[1].files.map((f) => f.sha256));
   });
 
+  const wroteReport = (cfg: Awaited<ReturnType<typeof uploadWorkspace>>, editId: string | null) =>
+    writeJson(cfg, reportPath(cfg, "play"), { store: "play", app: "com.example.demo", version: null, digest: "d", editId, editExpiresAt: null, startedAt: "", finishedAt: "", ok: true, error: null, sets: [] });
+
+  it("refuses an edit other than the one the last apply staged, and names the expected id", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    const report = await applyPlay(cfg, sets, plan, deps(fake));
+    wroteReport(cfg, report.editId);
+    fake.calls = [];
+    await expect(commitPlay(cfg, "1001", {}, deps(fake))).rejects.toThrow(/last --apply staged edit 1002, not 1001.*delete export\/upload-report-play\.json/s);
+    expect(fake.calls).toEqual([]);
+    await expect(commitPlay(cfg, "1002", {}, deps(fake))).resolves.toMatchObject({ editId: "1002" });
+  });
+
+  it("allows any edit when there is no report, or the report names no edit", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    const report = await applyPlay(cfg, sets, plan, deps(fake));
+    await expect(commitPlay(cfg, report.editId!, {}, deps(fake))).resolves.toMatchObject({ editId: "1002" });
+    wroteReport(cfg, null);
+    await expect(commitPlay(cfg, "1001", {}, deps(fake))).rejects.toThrow(/no longer has edit 1001/);
+  });
+
+  it("commits with changesNotSentForReview only when asked", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    const report = await applyPlay(cfg, sets, plan, deps(fake));
+    fake.needsManualReview = true;
+    await expect(commitPlay(cfg, report.editId!, {}, deps(fake))).rejects.toThrow(
+      "Google Play will not send these changes for review automatically. Run shotsmith upload play --commit 1002 --changes-not-sent-for-review after the user confirms, then send them for review in Play Console.");
+    expect(fake.calls.at(-1)).toBe(`POST ${EDITS}/1002:commit`);
+    expect(fake.edits.has("1002")).toBe(true);
+    const res = await commitPlay(cfg, report.editId!, { notSentForReview: true }, deps(fake));
+    expect(res.lines.join("\n")).toMatch(/Committed edit 1002\..*not sent for review.*Play Console/s);
+    expect(fake.shas("de-DE", "phoneScreenshots")).toEqual(sets[1].files.map((f) => f.sha256));
+  });
+
   it("explains an edit Google discarded", async () => {
     const cfg = await uploadWorkspace({ export: false });
-    await expect(commitPlay(cfg, "1001", deps(new FakePlay()))).rejects.toThrow(/no longer has edit 1001.*expires, or it was already committed \(check Play Console\)\..*--apply again/s);
+    await expect(commitPlay(cfg, "1001", {}, deps(new FakePlay()))).rejects.toThrow(/no longer has edit 1001.*expires, or it was already committed \(check Play Console\)\..*--apply again/s);
   });
 
   it("explains a 403 on commit", async () => {
     const cfg = await uploadWorkspace({ export: false });
     const fake = new FakePlay();
     fake.forbidden = true;
-    await expect(commitPlay(cfg, "1001", deps(fake))).rejects.toThrow(/lacks permission.*store listing/);
+    await expect(commitPlay(cfg, "1001", {}, deps(fake))).rejects.toThrow(/lacks permission.*store listing/);
   });
 
   it("refuses an edit id that is not one, without calling Google", async () => {
     const cfg = await uploadWorkspace({ export: false });
     const fake = new FakePlay();
-    await expect(commitPlay(cfg, "1001/../x", deps(fake))).rejects.toThrow(/not a Play edit id/);
+    await expect(commitPlay(cfg, "1001/../x", {}, deps(fake))).rejects.toThrow(/not a Play edit id/);
     expect(fake.calls).toEqual([]);
   });
 });

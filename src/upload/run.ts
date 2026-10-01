@@ -2,10 +2,10 @@ import type { ResolvedConfig } from "../config/schema.js";
 import { type AppleDeps, appleApp, applyApple, planApple } from "./apple.js";
 import { localSets } from "./local.js";
 import { type UploadPlan, type UploadReport, clearReport, describePlan, describeReport, makePlan, planPath, reportPath, requirePlan, writeJson } from "./plan.js";
-import { type PlayDeps, applyPlay, checkEditId, commitPlay, planPlay, playPackage } from "./play.js";
+import { type PlayDeps, applyPlay, checkCommit, commitPlay, planPlay, playPackage } from "./play.js";
 import { SERVICE_NAME, rel } from "./util.js";
 
-export interface UploadOptions { locales?: string[]; version?: string; apply?: boolean; commit?: string }
+export interface UploadOptions { locales?: string[]; version?: string; apply?: boolean; commit?: string; notSentForReview?: boolean }
 export interface UploadOutcome { ok: boolean; exitCode: 0 | 1 | 2; lines: string[]; json: Record<string, unknown> }
 
 // Export problems under --apply are only reported: the saved plan is the one the user reviewed, so it is not replaced.
@@ -55,9 +55,10 @@ export async function runPlay(cfg: ResolvedConfig, o: UploadOptions, connect: ()
   const app = playPackage(cfg);
   if (o.apply && o.commit !== undefined) throw new Error("Use either --apply or --commit, not both");
   if (o.commit !== undefined && o.locales?.length) throw new Error("-l does not apply to --commit");
+  if (o.notSentForReview && o.commit === undefined) throw new Error("--changes-not-sent-for-review only applies to --commit");
   if (o.commit !== undefined) {
-    checkEditId(o.commit);
-    const res = await commitPlay(cfg, o.commit, connect());
+    checkCommit(cfg, o.commit);
+    const res = await commitPlay(cfg, o.commit, { notSentForReview: o.notSentForReview }, connect());
     return { ok: true, exitCode: 0, lines: res.lines, json: { committed: res.editId } };
   }
   const scan = await localSets(cfg, "play", { locales: o.locales });

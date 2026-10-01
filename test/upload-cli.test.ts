@@ -34,6 +34,7 @@ describe("upload command", () => {
     const a = run(["upload", "apple", "--help"]);
     for (const f of ["--app-version", "--apply", "--locale"]) expect(a.out).toContain(f);
     expect(run(["upload", "play", "--help"]).out).toContain("--commit <editId>");
+    expect(run(["upload", "play", "--help"]).out).toContain("--changes-not-sent-for-review");
   });
 
   it("reports export problems with exit 1 before looking for credentials", async () => {
@@ -65,6 +66,7 @@ describe("upload command", () => {
     fails(run(["upload", "play", "--apply", "--commit", "1", "--json", "-C", cfg.root]), /either --apply or --commit/);
     fails(run(["upload", "play", "--commit", "a b", "--json", "-C", cfg.root]), /not a Play edit id/);
     fails(run(["upload", "play", "--commit", "1", "-l", "en", "--json", "-C", cfg.root]), /-l does not apply to --commit/);
+    fails(run(["upload", "play", "--changes-not-sent-for-review", "--json", "-C", cfg.root]), /--changes-not-sent-for-review only applies to --commit/);
     fails(run(["upload", "apple", "-l", "fr", "--json", "-C", cfg.root]), /Unknown locale\(s\): fr/);
     fails(run(["upload", "apple", "-l", ",", "--json", "-C", cfg.root]), /comma-separated list/);
     const noApple = await uploadWorkspace({ apple: false });
