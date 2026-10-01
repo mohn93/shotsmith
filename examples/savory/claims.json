@@ -1,0 +1,296 @@
+{
+  "opener.brand": {
+    "source": "store-copy: Savory - Recipes & Meal Plan",
+    "text": {
+      "en": "Savory",
+      "de": "Savory"
+    }
+  },
+  "opener.tagline": {
+    "source": "store-copy: Savory - Recipes & Meal Plan",
+    "text": {
+      "en": "Recipes & Meal Plan",
+      "de": "Rezepte & Essensplan"
+    }
+  },
+  "opener.headline": {
+    "source": "store-copy: Fresh ideas for your table",
+    "text": {
+      "en": "Fresh ideas\nfor your table.",
+      "de": "Frische Ideen\nfür deinen Tisch."
+    }
+  },
+  "opener.subline": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Find tonight’s dinner in seconds.",
+      "de": "Finde dein Abendessen in Sekunden."
+    }
+  },
+  "opener.search": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Search by dish or ingredient",
+      "de": "Suche nach Gericht oder Zutat"
+    }
+  },
+  "opener.searchSub": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Or start from Tonight’s Pick",
+      "de": "Oder starte mit dem Tipp des Abends"
+    }
+  },
+  "opener.cook": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "Cook time and servings",
+      "de": "Kochzeit und Portionen"
+    }
+  },
+  "opener.cookSub": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "And a clear list of what you’ll need",
+      "de": "Und eine klare Liste mit allem Nötigen"
+    }
+  },
+  "tonight.eyebrow": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Find dinner",
+      "de": "Abendessen finden"
+    }
+  },
+  "tonight.headline": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Tonight’s dinner,\nin seconds.",
+      "de": "Dein Abendessen,\nin Sekunden."
+    }
+  },
+  "tonight.subline": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Search by dish or ingredient, or start from Tonight’s Pick.",
+      "de": "Suche nach Gericht oder Zutat, oder starte mit dem Tipp des Abends."
+    }
+  },
+  "recipe.eyebrow": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "Recipes",
+      "de": "Rezepte"
+    }
+  },
+  "recipe.headline": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "Everything\nyou’ll need.",
+      "de": "Alles, was\ndu brauchst."
+    }
+  },
+  "recipe.subline": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "Cook time and servings on every recipe.",
+      "de": "Kochzeit und Portionen bei jedem Rezept."
+    }
+  },
+  "week.eyebrow": {
+    "source": "store-copy: Savory - Recipes & Meal Plan",
+    "text": {
+      "en": "Meal plan",
+      "de": "Essensplan"
+    }
+  },
+  "week.headline": {
+    "source": "store-copy: Plan your week: add lunches and dinners to any day and see what's on the menu at a glance.",
+    "text": {
+      "en": "Lunch and dinner,\nany day.",
+      "de": "Mittag- und\nAbendessen,\nan jedem Tag."
+    }
+  },
+  "week.subline": {
+    "source": "store-copy: Plan your week: add lunches and dinners to any day and see what's on the menu at a glance.",
+    "text": {
+      "en": "Plan your week and see what’s on the menu at a glance.",
+      "de": "Plane deine Woche und sieh auf einen Blick, was auf dem Speiseplan steht."
+    }
+  },
+  "saved.eyebrow": {
+    "source": "store-copy: Save the recipes you love and come back to them any time.",
+    "text": {
+      "en": "Saved",
+      "de": "Gespeichert"
+    }
+  },
+  "saved.headline": {
+    "source": "store-copy: Save the recipes you love and come back to them any time.",
+    "text": {
+      "en": "Save the ones\nyou love.",
+      "de": "Speichere,\nwas du liebst."
+    }
+  },
+  "saved.subline": {
+    "source": "store-copy: Save the recipes you love and come back to them any time.",
+    "text": {
+      "en": "Come back to them any time.",
+      "de": "Finde sie jederzeit wieder."
+    }
+  },
+  "saved.contents": {
+    "source": "store-copy: Savory - Recipes & Meal Plan",
+    "text": {
+      "en": "Inside Savory",
+      "de": "Alles in Savory"
+    }
+  },
+  "saved.num1": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "01",
+      "de": "01"
+    }
+  },
+  "saved.row1": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Search",
+      "de": "Suche"
+    }
+  },
+  "saved.row1Sub": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "By dish or ingredient",
+      "de": "Nach Gericht oder Zutat"
+    }
+  },
+  "saved.num2": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "02",
+      "de": "02"
+    }
+  },
+  "saved.row2": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Tonight’s Pick",
+      "de": "Tipp des Abends"
+    }
+  },
+  "saved.row2Sub": {
+    "source": "store-copy: Find tonight's dinner in seconds. Search recipes by dish or ingredient, or start from Tonight's Pick.",
+    "text": {
+      "en": "Tonight’s dinner, in seconds",
+      "de": "Dein Abendessen in Sekunden"
+    }
+  },
+  "saved.num3": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "03",
+      "de": "03"
+    }
+  },
+  "saved.row3": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "Cook time and servings",
+      "de": "Kochzeit und Portionen"
+    }
+  },
+  "saved.row3Sub": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "Shown on every recipe",
+      "de": "Bei jedem Rezept"
+    }
+  },
+  "saved.num4": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "04",
+      "de": "04"
+    }
+  },
+  "saved.row4": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "What you’ll need",
+      "de": "Alles, was du brauchst"
+    }
+  },
+  "saved.row4Sub": {
+    "source": "store-copy: Every recipe shows its cook time, servings and a clear list of what you'll need.",
+    "text": {
+      "en": "A clear list for every recipe",
+      "de": "Eine klare Liste zu jedem Rezept"
+    }
+  },
+  "saved.num5": {
+    "source": "store-copy: Plan your week: add lunches and dinners to any day and see what's on the menu at a glance.",
+    "text": {
+      "en": "05",
+      "de": "05"
+    }
+  },
+  "saved.row5": {
+    "source": "store-copy: Plan your week: add lunches and dinners to any day and see what's on the menu at a glance.",
+    "text": {
+      "en": "Meal plan",
+      "de": "Essensplan"
+    }
+  },
+  "saved.row5Sub": {
+    "source": "store-copy: Plan your week: add lunches and dinners to any day and see what's on the menu at a glance.",
+    "text": {
+      "en": "Lunches and dinners, any day",
+      "de": "Mittag- und Abendessen, jeden Tag"
+    }
+  },
+  "saved.num6": {
+    "source": "store-copy: Quick and lovely: short recipes for busy nights, with vegetarian picks clearly labeled.",
+    "text": {
+      "en": "06",
+      "de": "06"
+    }
+  },
+  "saved.row6": {
+    "source": "store-copy: Quick and lovely: short recipes for busy nights, with vegetarian picks clearly labeled.",
+    "text": {
+      "en": "Quick and lovely",
+      "de": "Schnell und köstlich"
+    }
+  },
+  "saved.row6Sub": {
+    "source": "store-copy: Quick and lovely: short recipes for busy nights, with vegetarian picks clearly labeled.",
+    "text": {
+      "en": "Short recipes for busy nights",
+      "de": "Kurze Rezepte für volle Abende"
+    }
+  },
+  "saved.num7": {
+    "source": "store-copy: Quick and lovely: short recipes for busy nights, with vegetarian picks clearly labeled.",
+    "text": {
+      "en": "07",
+      "de": "07"
+    }
+  },
+  "saved.row7": {
+    "source": "store-copy: Quick and lovely: short recipes for busy nights, with vegetarian picks clearly labeled.",
+    "text": {
+      "en": "Vegetarian picks",
+      "de": "Vegetarische Gerichte"
+    }
+  },
+  "saved.row7Sub": {
+    "source": "store-copy: Quick and lovely: short recipes for busy nights, with vegetarian picks clearly labeled.",
+    "text": {
+      "en": "Clearly labeled",
+      "de": "Klar gekennzeichnet"
+    }
+  }
+}

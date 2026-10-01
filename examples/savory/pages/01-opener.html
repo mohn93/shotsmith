@@ -1,0 +1,70 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, t, headline, ready } from "shotsmith/kit";
+import { C, box, s, svgLayer, paper, icon, accentLast } from "./system.js";
+import { kit } from "./art.js";
+
+const st = await stage();
+const L = st.pick({
+  tall: { fy: 150, hs: 168, sub: 58, plate: [850, 1475, 560], subGap: 60, rows: 2185, row: 128, rowGap: 72, rt: 56, rs: 44 },
+  p916: { fy: 120, hs: 150, sub: 52, plate: [880, 1150, 440], subGap: 50, rows: 1745, row: 112, rowGap: 52, rt: 50, rs: 40 },
+});
+const M = 100;
+paper(st, { base: C.paper, light: 0.04, vignette: 0.07, fiber: 1.8, z: 0 });
+
+// ---------- folio (masthead rules) ----------
+const rule = (y, h, o = 1) => box(st.root, `left:${M}px;right:${M}px;top:${y}px;height:${h}px;background:${C.ink};opacity:${o};z-index:20`);
+rule(L.fy, 4); rule(L.fy + 10, 1.5);
+const folio = (id, side, color) => {
+  const n = t.el("div", id, st.root);
+  n.style.cssText = `position:absolute;${side}:${M}px;top:${L.fy + 38}px;z-index:20;color:${color};font:700 40px/1 var(--font-text);letter-spacing:.18em;text-transform:uppercase;white-space:nowrap`;
+};
+folio("opener.brand", "left", C.folio);
+folio("opener.tagline", "right", C.cocoa);
+rule(L.fy + 100, 1.5, .5);
+
+// ---------- headline and subline ----------
+const hl = box(st.root, `left:${M - 6}px;top:${L.fy + 170}px;width:${st.W - M - 64}px;z-index:20;color:${C.ink};font-family:var(--font-display);font-weight:600;letter-spacing:-0.022em`);
+const fit = await headline(hl, "opener.headline", { maxSize: L.hs, maxLines: 2, lineHeight: 1.02 });
+accentLast(hl, C.tomato);
+const sub = t.el("div", "opener.subline", st.root);
+sub.style.cssText = `position:absolute;left:${M}px;top:${fit.bottom + 44}px;width:${st.W - 2 * M}px;z-index:20;font:400 ${L.sub}px/1.25 var(--font-text);color:${C.cocoa};letter-spacing:-0.005em`;
+const subBottom = sub.getBoundingClientRect().bottom / st.scale;
+
+// ---------- hero plate (SVG), placed below the subline ----------
+const svg = svgLayer(st, 5);
+const K = kit(svg, 11);
+const [PX, , R] = L.plate, PY = Math.max(L.plate[1], subBottom + L.subGap + R * 0.98);
+K.pastaPlate(svg, PX, PY, R, 11);
+// loose ingredients on the paper: a basil sprig above, a whole and a half tomato below
+const f = R / 560, Y = (y) => PY + (y - 1475) * f;
+{ const [x0, y0, cx, cy, x1, y1] = [185, Y(1345), 205, Y(1255), 262, Y(1150)];
+  s("path", { d: `M${x0} ${y0} Q ${cx} ${cy} ${x1} ${y1}`, stroke: "#3f7d4b", "stroke-width": 7 * f, fill: "none", "stroke-linecap": "round" }, svg);
+  const mx = .25 * x0 + .5 * cx + .25 * x1, my = .25 * y0 + .5 * cy + .25 * y1;
+  K.basil(svg, mx, my, 140 * f, -62);
+  K.basil(svg, x1, y1, 175 * f, 14); }
+const ty = Y(1790);
+K.tomatoWhole(svg, 165, ty, 58 * f, 0);
+K.tomatoHalf(svg, 165 + 125 * f, ty + 95 * f, 60 * f, -20);
+// print texture over the art (paper fibres multiply into the illustration)
+paper(st, { mode: 1, z: 8, opacity: .9, light: 0, vignette: 0, fiber: 1.4, seed: 5 });
+
+// ---------- proof rows ----------
+const RY = Math.max(L.rows, PY + R + 70);
+rule(RY, 1.5, .5);
+const rows = box(st.root, `left:${M}px;right:${M}px;top:${RY + 70}px;z-index:20;display:flex;flex-direction:column;gap:${L.rowGap}px`);
+const row = (ic, bg, id, subId) => {
+  const r = box(rows, "position:relative;display:flex;align-items:center;gap:42px");
+  box(r, `position:relative;flex:none;width:${L.row}px;height:${L.row}px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;box-shadow:0 10px 22px -10px rgba(63,41,36,.45)`,
+    icon(ic, { size: L.row * 0.55, sw: 5 }));
+  const tx = box(r, "position:relative");
+  const a = t.el("div", id, tx);
+  a.style.cssText = `font:700 ${L.rt}px/1.1 var(--font-text);letter-spacing:-0.01em;color:${C.ink}`;
+  const b = t.el("div", subId, tx);
+  b.style.cssText = `font:400 ${L.rs}px/1.3 var(--font-text);color:${C.cocoa};margin-top:8px`;
+};
+row("search", C.tomato, "opener.search", "opener.searchSub");
+row("clock", C.basil, "opener.cook", "opener.cookSub");
+
+await ready();
+</script></body></html>

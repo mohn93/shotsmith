@@ -1,0 +1,66 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, t, ready } from "shotsmith/kit";
+import { C, box, s, svgLayer, paper, icon, title } from "./system.js";
+import { kit } from "./art.js";
+
+const st = await stage();
+const M = 100;
+const L = st.pick({
+  tall: { top: 150, size: 140, sub: 54, ribbon: 560, gap: 240, toc: 110, rh: 222, num: 76, rt: 58, rs: 46, ring: 104, sprig: [1330, 2690, 1060, 2600, 150] },
+  p916: { top: 120, size: 120, sub: 48, ribbon: 470, gap: 120, toc: 96, rh: 186, num: 64, rt: 50, rs: 40, ring: 88, sprig: [1320, 2215, 1110, 2150, 110] },
+});
+paper(st, { base: C.paper, light: 0.04, vignette: 0.07, fiber: 1.8, z: 0, seed: 13 });
+
+// ---------- bookmark ribbon hanging from the top edge ----------
+const svg = svgLayer(st, 4);
+const defs = s("defs", {}, svg);
+const bl = (id, sd) => { const f = s("filter", { id, x: "-50%", y: "-50%", width: "200%", height: "200%" }, defs); s("feGaussianBlur", { stdDeviation: sd }, f); };
+bl("r12", 12); bl("r4", 4);
+const RX = 1040, RW = 124, RL = L.ribbon, notch = 46;
+const rib = `M${RX} -10 L${RX + RW} -10 L${RX + RW} ${RL} L${RX + RW / 2} ${RL - notch} L${RX} ${RL} Z`;
+s("path", { d: rib, fill: "#5a2a14", "fill-opacity": .22, transform: "translate(10 16)", filter: "url(#r12)" }, svg);
+s("path", { d: rib, fill: "#6a1f14", "fill-opacity": .25, transform: "translate(3 4)", filter: "url(#r4)" }, svg);
+const g1 = s("linearGradient", { id: "rib", x1: 0, y1: 0, x2: 1, y2: 0 }, defs);
+[[0, "#D24A31"], [.18, "#E45D3F"], [.7, "#E8664A"], [1, "#C94330"]].forEach(([o, c]) => s("stop", { offset: o, "stop-color": c }, g1));
+s("path", { d: rib, fill: "url(#rib)" }, svg);
+for (let y = 10; y < RL - notch; y += 7) s("path", { d: `M${RX + 6} ${y} L${RX + RW - 6} ${y}`, stroke: "#fff", "stroke-opacity": .045, "stroke-width": 2 }, svg);   // woven sheen
+s("path", { d: `M${RX + 12} -10 L${RX + 12} ${RL - 22} M${RX + RW - 12} -10 L${RX + RW - 12} ${RL - 22}`, stroke: "#FFE2D4", "stroke-opacity": .55, "stroke-width": 2.5, "stroke-dasharray": "9 8" }, svg);
+box(st.root, `left:${RX + RW / 2 - 34}px;top:${RL - 190}px;z-index:6`, icon("heart", { size: 68, color: "#FFF4E8", sw: 5 }));
+// a basil sprig at the foot of the page
+const K = kit(svg, 9);
+K.sprig(svg, ...L.sprig);
+paper(st, { mode: 1, z: 7, opacity: .8, light: 0, vignette: 0, fiber: 1.6, seed: 6 });
+
+// ---------- title ----------
+const tt = await title(st, { eyebrow: "saved.eyebrow", id: "saved.headline", sub: "saved.subline", top: L.top, size: L.size, subSize: L.sub, maxW: 880 });
+
+// ---------- contents page: seven features from the store copy ----------
+const TY = tt.bottom + L.gap;
+const rule = (y, h, css = "") => box(st.root, `left:${M}px;right:${M}px;top:${y}px;height:${h}px;background:${C.ink};z-index:20;${css}`);
+rule(TY, 4); rule(TY + 10, 1.5);
+const head = t.el("div", "saved.contents", st.root);
+head.style.cssText = `position:absolute;left:${M}px;top:${TY + 40}px;z-index:20;color:${C.folio};font:700 38px/1 var(--font-text);letter-spacing:.2em;text-transform:uppercase`;
+const ICONS = ["search", "plate", "clock", "list", "calendar", "bolt", "leaf"];
+const texts = [];
+ICONS.forEach((ic, i) => {
+  const y = TY + L.toc + i * L.rh, n = i + 1;
+  if (i) rule(y, 1.5, `left:${M + 150}px;opacity:.16`);
+  const num = t.el("div", `saved.num${n}`, st.root);
+  num.style.cssText = `position:absolute;left:${M}px;top:${y + L.rh * 0.17}px;z-index:20;font:600 ${L.num}px/1 var(--font-display);color:${C.tomatoDeep};font-variant-numeric:lining-nums`;
+  const col = box(st.root, `left:${M + 150}px;top:${y + L.rh * 0.18}px;width:${st.W - 2 * M - 150 - L.ring - 44}px;z-index:20`);
+  const a = t.el("div", `saved.row${n}`, col);
+  a.style.cssText = `font:700 ${L.rt}px/1.1 var(--font-text);letter-spacing:-0.012em;color:${C.ink};white-space:nowrap`;
+  const b = t.el("div", `saved.row${n}Sub`, col);
+  b.style.cssText = `font:400 ${L.rs}px/1.25 var(--font-text);color:${C.cocoa};margin-top:10px;white-space:nowrap`;
+  texts.push([a, L.rt], [b, L.rs]);
+  box(st.root, `right:${M}px;top:${y + (L.rh - L.ring) / 2}px;width:${L.ring}px;height:${L.ring}px;border-radius:50%;border:3px solid ${C.tomato};box-sizing:border-box;display:flex;align-items:center;justify-content:center;z-index:20`,
+    icon(ic, { size: L.ring * 0.54, color: C.tomato, sw: 4.5 }));
+});
+// A long translation shrinks every row's text by the same factor, so the list keeps one size.
+const room = st.W - 2 * M - 150 - L.ring - 44;
+const k = Math.min(1, ...texts.map(([n]) => room / n.scrollWidth * 0.98));
+if (k < 1) for (const [n, size] of texts) n.style.fontSize = size * k + "px";
+
+await ready();
+</script></body></html>

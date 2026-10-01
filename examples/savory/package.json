@@ -1,0 +1,6 @@
+{
+  "name": "shotsmith-example-savory",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node ../../dist/cli.js build" }
+}

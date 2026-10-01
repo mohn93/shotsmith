@@ -1,0 +1,19 @@
+{
+  "app": "Savory",
+  "pages": ["01-opener", "02-tonight", "03-recipe", "04-week", "05-saved"],
+  "targets": ["iphone-6.9", "android-phone"],
+  "locales": [
+    { "code": "en", "apple": "en-US", "play": "en-US" },
+    { "code": "de", "apple": "de-DE", "play": "de-DE" }
+  ],
+  "fonts": {
+    "display": { "apple": "fonts/Lora.ttf", "play": "fonts/Lora.ttf" },
+    "display-italic": { "apple": "fonts/Lora-Italic.ttf", "play": "fonts/Lora-Italic.ttf" },
+    "text": {
+      "apple": { "400": "fonts/Inter-Regular.ttf", "700": "fonts/Inter-Bold.ttf" },
+      "play": { "400": "fonts/Inter-Regular.ttf", "700": "fonts/Inter-Bold.ttf" }
+    }
+  },
+  "captures": { "iphone": { "statusBar": "included" }, "android-phone": { "statusBar": "included" } },
+  "output": "export"
+}

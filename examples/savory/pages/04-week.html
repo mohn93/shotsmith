@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, lift, ready } from "shotsmith/kit";
+import { C, paper, svgLayer, title, warmShadow } from "./system.js";
+import { kit } from "./art.js";
+
+const st = await stage();
+// Plan capture px, measured per platform: the five day tiles (x of each, width, top, bottom, corner radius), and `cut`,
+// the capture row where the bottom edge should crop: below "+ Add a meal", above the tab bar's divider.
+const L = st.pick({
+  tall: { top: 150, size: 140, sub: 54, y: 880, gap: 150, bowl: [30, 2190, 320], cut: 2240,
+    tiles: [78, 294, 510, 726, 942], tw: 189, ty: [696, 900], tr: 42 },
+  p916: { top: 120, size: 120, sub: 48, y: 660, gap: 90, bowl: [20, 1810, 270], cut: 2010,
+    tiles: [96, 285, 474, 663, 852], tw: 165, ty: [641, 819], tr: 37 },
+});
+paper(st, { base: C.sage, light: 0.05, vignette: 0.06, fiber: 1.8, z: 0, seed: 11 });
+
+const tt = await title(st, { eyebrow: "week.eyebrow", id: "week.headline", sub: "week.subline", top: L.top, size: L.size, subSize: L.sub,
+  accent: C.tomatoDeep });
+
+// the lunch on the table: roasted pepper bowl tucked under the phone, bleeding off the left edge
+const svg = svgLayer(st, 4);
+const K = kit(svg, 5);
+K.pepperBowl(svg, ...L.bowl);
+paper(st, { mode: 1, z: 5, opacity: .8, light: 0, vignette: 0, fiber: 1.6, seed: 4 });
+
+// phone offset right (50 px from the edge), sized so the bottom edge crops at `cut` wherever the title ends
+const y = Math.max(L.y, tt.bottom + L.gap);
+const cw = st.pick({ tall: 1170, p916: 1080 });
+const sw = (st.H - y) / L.cut * cw;
+const d = await device({ capture: "savory-plan", x: st.W - sw - 50, y, width: sw, repaint: true, shadow: false, z: 10 });
+warmShadow(st, d, { color: "50,60,30" });
+// the five day tiles, each lifted over its own place in the strip
+for (const x0 of L.tiles) lift(d, { region: [x0, L.ty[0], x0 + L.tw, L.ty[1]], mode: "cover", scale: 1.1, radius: L.tr,
+  shadow: "0 3px 4px rgba(50,60,30,.16), 0 20px 24px -4px rgba(50,60,30,.22)" });
+
+await ready();
+</script></body></html>
