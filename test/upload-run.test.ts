@@ -40,7 +40,9 @@ describe("runApple", () => {
     const fake = new FakeAsc();
     await runApple(cfg, {}, apple(fake));
     fake.failProcessing = true;
-    await expect(runApple(cfg, { apply: true }, apple(fake))).rejects.toThrow(/could not process.*report: export\/upload-report-apple\.json/s);
+    const out = await runApple(cfg, { apply: true }, apple(fake));
+    expect(out).toMatchObject({ ok: false, exitCode: 2, json: { error: { message: expect.stringMatching(/could not process.*report: export\/upload-report-apple\.json/s) }, reportFile: "export/upload-report-apple.json" } });
+    expect(out.lines).toEqual(expect.arrayContaining([expect.stringMatching(/failed after deleting/), expect.stringMatching(/^Upload failed: .*could not process/), "Report written to export/upload-report-apple.json."]));
     expect((JSON.parse(fs.readFileSync(reportPath(cfg, "apple"), "utf8")) as UploadReport).ok).toBe(false);
   });
 

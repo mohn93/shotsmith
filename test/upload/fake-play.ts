@@ -21,6 +21,8 @@ export class FakePlay {
   forbidden = false;
   // The service answers every upload with a wrong sha256.
   corruptUploads = false;
+  // The service answers :validate with 400.
+  failValidate = false;
   private imageN = 0;
   private editN = 1000;
 
@@ -58,6 +60,7 @@ export class FakePlay {
     }
     const edit = this.edits.get(editId);
     if (!edit) return fail(400, "This Edit has been deleted.");
+    if (action === "validate" && this.failValidate) return fail(400, "Validation failed");
     if (action === "validate") return reply(200, { id: editId });
     if (action === "commit") {
       this.live = edit;

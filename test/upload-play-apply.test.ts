@@ -62,8 +62,19 @@ describe("applyPlay", () => {
     const report = await applyPlay(cfg, sets, plan, deps(fake));
     expect(report).toMatchObject({ ok: false, editId: null, error: expect.stringMatching(/en-US phoneScreenshots: Google Play stored .* with a different checksum/) });
     expect(report.sets).toHaveLength(1);
-    expect(report.sets[0]).toMatchObject({ storeLocale: "en-US", status: "failed", uploaded: [] });
+    expect(report.sets[0]).toMatchObject({ storeLocale: "en-US", status: "discarded", uploaded: [] });
+    expect(report.error).toMatch(/draft edit was discarded/);
     expect(fake.edits.size).toBe(0);
+  });
+
+  it("discards every staged set when the edit does not validate", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    fake.failValidate = true;
+    const report = await applyPlay(cfg, sets, plan, deps(fake));
+    expect(report).toMatchObject({ ok: false, editId: null, error: expect.stringMatching(/Validation failed.*draft edit was discarded.*listing is unchanged/s) });
+    expect(report.sets.map((s) => s.status)).toEqual(["discarded", "discarded"]);
+    expect(fake.edits.size).toBe(0);
+    expect(fake.shas("en-US", "phoneScreenshots")).toEqual([]);
   });
 });
 

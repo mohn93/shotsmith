@@ -25,7 +25,7 @@ export interface AppliedSet {
   storeLocale: string;
   target: string;
   slot: string;
-  status: "unchanged" | "changed" | "failed";
+  status: "unchanged" | "changed" | "failed" | "discarded";
   deleted: string[];
   uploaded: { file: string; id: string }[];
   order: { file: string; id: string; checksum: string }[];
@@ -102,6 +102,12 @@ export function describePlan(p: UploadPlan): string[] {
   return lines;
 }
 
+const describeApplied = (s: AppliedSet): string =>
+  s.status === "unchanged" ? "unchanged"
+    : s.status === "discarded" ? "discarded with the draft edit (listing unchanged)"
+    : s.status === "failed" ? `failed after deleting ${s.deleted.length} and uploading ${s.uploaded.length}`
+    : `deleted ${s.deleted.length}, uploaded ${s.uploaded.length}, ${s.order.length} in order and verified`;
+
 export function describeReport(r: UploadReport): string[] {
-  return r.sets.map((s) => `${head(s)}: ${s.status === "unchanged" ? "unchanged" : s.status === "failed" ? `failed after deleting ${s.deleted.length} and uploading ${s.uploaded.length}` : `deleted ${s.deleted.length}, uploaded ${s.uploaded.length}, ${s.order.length} in order and verified`}`);
+  return r.sets.map((s) => `${head(s)}: ${describeApplied(s)}`);
 }

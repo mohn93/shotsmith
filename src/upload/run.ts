@@ -6,7 +6,7 @@ import { type UploadPlan, type UploadReport, describePlan, describeReport, makeP
 import { type PlayDeps, applyPlay, checkEditId, commitPlay, planPlay, playPackage } from "./play.js";
 
 export interface UploadOptions { locales?: string[]; version?: string; apply?: boolean; commit?: string }
-export interface UploadOutcome { ok: boolean; exitCode: 0 | 1; lines: string[]; json: Record<string, unknown> }
+export interface UploadOutcome { ok: boolean; exitCode: 0 | 1 | 2; lines: string[]; json: Record<string, unknown> }
 
 const rel = (cfg: ResolvedConfig, p: string) => path.relative(cfg.root, p).split(path.sep).join("/");
 
@@ -18,10 +18,16 @@ function planOutcome(cfg: ResolvedConfig, plan: UploadPlan, next: string): Uploa
   return { ok: true, exitCode: 0, lines: [...describePlan(plan), `Plan written to ${file}. Nothing was changed. Show this plan to the user; ${next}`], json: { plan, planFile: file } };
 }
 
-// A failed apply still leaves its report, then fails the command (exit 2).
+// A failed apply still leaves its report and says what it did before it stopped, then fails the command (exit 2).
 function reportOutcome(cfg: ResolvedConfig, report: UploadReport, last: string[]): UploadOutcome {
   const file = rel(cfg, writeJson(cfg, reportPath(cfg, report.store), report));
-  if (!report.ok) throw new Error(`${report.error} (report: ${file})`);
+  if (!report.ok) {
+    return {
+      ok: false, exitCode: 2,
+      lines: [...describeReport(report), `Upload failed: ${report.error}`, `Report written to ${file}.`],
+      json: { error: { message: `${report.error} (report: ${file})` }, report, reportFile: file },
+    };
+  }
   return { ok: true, exitCode: 0, lines: [...describeReport(report), `Report written to ${file}.`, ...last], json: { report, reportFile: file } };
 }
 

@@ -135,7 +135,9 @@ export async function applyPlay(cfg: ResolvedConfig, local: LocalSet[], saved: U
       }
       report.ok = true;
     } catch (e) {
-      report.error = (e as Error).message;
+      // The edit is deleted below, so nothing this run staged reaches the listing.
+      for (const s of report.sets) if (s.status === "changed" || s.status === "failed") s.status = "discarded";
+      report.error = `${(e as Error).message}. The draft edit was discarded, so the Google Play listing is unchanged`;
     }
     report.finishedAt = new Date(now()).toISOString();
     return report;
@@ -144,7 +146,8 @@ export async function applyPlay(cfg: ResolvedConfig, local: LocalSet[], saved: U
   }
 }
 
-// Fills `rec` as it goes: on failure it keeps status "failed" and what was done so far.
+// Fills `rec` as it goes: on failure it keeps status "failed" and what was done so far (applyPlay then marks it
+// "discarded", since the edit is deleted).
 async function applyPlaySet(c: PlayClient, edit: string, { plan: p, local }: PlayPair, rec: AppliedSet, log: (line: string) => void): Promise<void> {
   if (p.status === "unchanged") {
     rec.status = "unchanged";
