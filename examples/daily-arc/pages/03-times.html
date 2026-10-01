@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, device, ready } from "shotsmith/kit";
+import { C, title, blockShadow, pill, svgLayer, sun, sparkle, ICONS } from "./system.js";
+
+const SHADE = "#F07544";
+const st = await stage();
+st.root.style.background = C.peach;
+const L = st.pick({
+  tall: { y: 150, size: 176, subSize: 54, subGap: 44, subWidth: 900, sw: 880, x: 420, gap: 167, pillH: 124, pillFont: 70, clock: 58 },
+  p916: { y: 120, size: 150, subSize: 46, subGap: 36, subWidth: 820, sw: 740, x: 480, gap: 130, pillH: 108, pillFont: 60, clock: 50 },
+});
+const f = L.sw / 880;
+
+const tt = await title(st, "times.headline", { y: L.y, size: L.size, sub: "times.subline", subSize: L.subSize, subGap: L.subGap, subWidth: L.subWidth });
+
+// phone, tilted and cropped off the right edge
+const TILT = 6, y = tt.bottom + L.gap;
+const d = await device({ capture: "daily-rituals", x: L.x, y, width: L.sw, tilt: `rotate(${TILT}deg)`, repaint: true, shadow: false, z: 10 });
+blockShadow(st, d, { dx: -26 * f, dy: 30 * f, color: SHADE, ambient: "rgba(90,30,0,0.40)" });
+// capture px -> stage px through the tilt (the frame rotates about 50% 40%)
+const fr = d.el.style, fl = parseFloat(fr.left), ft = parseFloat(fr.top), fw = parseFloat(fr.width), fh = parseFloat(fr.height);
+const O = [fl + fw * 0.5, ft + fh * 0.4], a = TILT * Math.PI / 180;
+const at = (cx, cy) => { const [lx, ly] = d.toLocal(cx, cy), dx = fl + lx - O[0], dy = ft + ly - O[1];
+  return [O[0] + dx * Math.cos(a) - dy * Math.sin(a), O[1] + dx * Math.sin(a) + dy * Math.cos(a)]; };
+
+// time pills over the capture's time labels, popping out to the left (label centre and right reach measured in capture px)
+const T = st.pick({ tall: { x: 175, reach: 115, ys: [1302, 1557, 1812] }, p916: { x: 181, reach: 100, ys: [1171, 1394, 1617] } });
+T.ys.forEach((cy, i) => {
+  const [px, py] = at(T.x, cy);
+  const p = pill(st.root, `times.time${i + 1}`, { h: L.pillH, pad: 44 * f, font: `700 ${L.pillFont}px var(--font-display)`, rotate: -3, z: 30, icon: ICONS.clock(L.clock) });
+  p.el.style.left = px - p.el.offsetWidth + T.reach * d.k + "px";
+  p.el.style.top = py - L.pillH / 2 + "px";
+});
+
+// morning sun ornament on the open left side
+const g = svgLayer(st, 5);
+sun(g, 215, y + 240 * f, 88 * f, C.sunshine, C.white);
+sparkle(g, 340, y + 510 * f, 34 * f, C.white);
+sparkle(g, 1150, y - 110 * f, 46 * f, C.white);
+
+await ready();
+</script></body></html>

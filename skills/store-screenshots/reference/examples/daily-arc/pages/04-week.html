@@ -1,0 +1,68 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, t, ready } from "shotsmith/kit";
+import { C, title, box, lineBoxes, pill, svgLayer, s, sparkle, ICONS } from "./system.js";
+
+const SHADE = "#3572DB";
+const st = await stage();
+st.root.style.background = C.sky;
+const L = st.pick({
+  tall: { y: 150, size: 176, subSize: 54, subGap: 44, subWidth: 1000, num: 400, numGap: 90, cardGap: 170, chipH: 150, chipFont: 58, chipBottom: 250 },
+  p916: { y: 120, size: 150, subSize: 46, subGap: 36, subWidth: 900, num: 330, numGap: 70, cardGap: 120, chipH: 132, chipFont: 50, chipBottom: 170 },
+});
+const px = (n) => n.getBoundingClientRect();
+const lg = (v) => v / st.scale;
+
+const tt = await title(st, "week.headline", { y: L.y, size: L.size, color: C.white, sub: "week.subline", subSize: L.subSize, subGap: L.subGap, subWidth: L.subWidth });
+
+// hero numeral, re-typeset from the insights capture's THIS WEEK card
+const row = box(st.root, `left:80px;top:${tt.bottom + L.numGap}px;z-index:30;display:flex;align-items:center;gap:36px;color:${C.white}`);
+const num = t.el("div", "week.rate", row);
+num.style.cssText = `font:700 ${L.num}px/1 var(--font-display);letter-spacing:-0.02em;word-spacing:-0.18em;white-space:nowrap;text-shadow:0 ${L.num * 0.055}px 0 ${SHADE}`;
+const side = box(row, "position:relative;display:flex;flex-direction:column;gap:10px");
+const period = t.el("div", "week.period", side);
+period.style.cssText = `font:900 ${L.num * 0.1}px/1 var(--font-text);letter-spacing:0.12em;color:#D6E4FD`;
+const label = t.el("div", "week.rateLabel", side);
+label.style.cssText = `font:900 ${L.num * 0.17}px/1.1 var(--font-text)`;
+
+// streak chip, the insights capture's streak line; anchored to the bottom
+const flame = `<span style="flex:none;display:inline-block;width:${L.chipH * 0.75}px;height:${L.chipH * 0.75}px;margin-left:-10px">${ICONS.flame("#F2552C", "#FFE08A")}</span>`;
+const chip = pill(st.root, "week.streak", { x: 88, y: 0, h: L.chipH, pad: 50, bg: C.sunshine, edge: C.sunshineShade, color: C.ink, radius: L.chipH * 0.42,
+  font: `900 ${L.chipFont}px var(--font-text)`, lineHeight: 1.12, rotate: -2, icon: flame });
+chip.label.style.textWrap = "balance";
+Object.assign(chip.el.style, { maxWidth: "1000px", paddingTop: "22px", paddingBottom: "22px", boxSizing: "border-box" });
+// shrink the chip to its balanced lines
+chip.label.style.width = Math.ceil(Math.max(...lineBoxes(st, chip.label).map((b) => b.r - b.l))) + 2 + "px";
+const chipTop = st.H - L.chipBottom - lg(px(chip.el).height);
+chip.el.style.top = chipTop + "px";
+
+// the last 7 days, redrawn from bar heights measured in the capture
+const HEIGHTS = [134, 198, 234, 160, 269, 219, 251];
+const CX = 88, CY = lg(px(num).bottom) + L.cardGap, CW = 1084, CH = chipTop - 140 - CY;
+const card = box(st.root, `left:${CX}px;top:${CY}px;width:${CW}px;height:${CH}px;border-radius:72px;background:${C.white};z-index:20;` +
+  `box-shadow:0 22px 0 ${SHADE}, 0 70px 90px -40px rgba(10,30,90,0.45)`);
+const head = t.el("div", "week.chartTitle", card);
+head.style.cssText = `position:absolute;left:70px;top:62px;font:900 62px/1 var(--font-text);color:${C.ink}`;
+const g = s("svg", { width: CW, height: CH, viewBox: `0 0 ${CW} ${CH}`, style: "position:absolute;left:0;top:0" }, card);
+const BW = 104, n = 7, left = 78, right = CW - 78, step = (right - left - BW) / (n - 1), base = CH - 170, maxH = CH - 390;
+HEIGHTS.forEach((hh, i) => {
+  const h = hh / 269 * maxH;
+  s("rect", { x: left + i * step, y: base - h, width: BW, height: h, rx: 30, fill: i === n - 1 ? C.green : "#AED9CA" }, g);
+});
+s("line", { x1: left - 10, y1: base, x2: right + 10, y2: base, stroke: "#E6ECEA", "stroke-width": 6, "stroke-linecap": "round" }, g);
+// day letters: one claim, each letter centred under its bar
+const days = box(card, `left:0;top:${base + 40}px;width:${CW}px;height:70px;font:900 50px/70px var(--font-text);color:#8A989E`);
+days.dataset.claim = "week.days";
+t("week.days").split(" ").forEach((d, i) => {
+  box(days, `left:${left + i * step}px;width:${BW}px;top:0;text-align:center;${i === n - 1 ? `color:${C.green}` : ""}`).textContent = d;
+});
+
+const o = svgLayer(st, 40);
+// sparkles beside the first two headline lines, where the translation leaves room
+const hl = lineBoxes(st, tt.h);
+if (hl[0].r < 1040) sparkle(o, 1150, (hl[0].t + hl[0].b) / 2, 50, C.white);
+if (hl[1] && hl[1].r < 1000) sparkle(o, 1060, hl[1].b - 20, 26, C.sunshine);
+sparkle(o, 1150, chipTop + 70, 40, C.white);
+
+await ready();
+</script></body></html>

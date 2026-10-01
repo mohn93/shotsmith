@@ -16,7 +16,8 @@
     "build": "tsup",
     "lint": "tsc --noEmit",
     "test": "npm run build && vitest run",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "examples": "npm run build && node scripts/build-examples.mjs"
   },
   "dependencies": {
     "commander": "^14.0.3",

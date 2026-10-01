@@ -1,0 +1,50 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, capture, ready } from "shotsmith/kit";
+import { C, title, crop, checkBadge, svgLayer, s, sparkle } from "./system.js";
+
+const SHADE = "#27A878", DEEP = "#1E8E64";
+const st = await stage();
+st.root.style.background = C.sprout;
+const L = st.pick({
+  tall: { y: 150, size: 176, subSize: 54, subGap: 44, subWidth: 760, top: 1060, step: 450, w: 1090, badge: 66 },
+  p916: { y: 120, size: 150, subSize: 46, subGap: 36, subWidth: 680, top: 860, step: 390, w: 1010, badge: 60 },
+});
+
+const tt = await title(st, "checkoff.headline", { y: L.y, size: L.size, sub: "checkoff.subline", subSize: L.subSize, subGap: L.subGap, subWidth: L.subWidth });
+const y1 = Math.max(L.top - 120 * (L.step / 450), tt.bottom + 220 * (L.step / 450));
+const v = L.step / 450;   // vertical scale of the art against the iPhone layout
+
+// giant flat check mark behind the stack
+const bg = svgLayer(st, 1);
+s("path", { d: `M150 ${y1 + 1090 * v} L480 ${y1 + 1420 * v} L1180 ${y1 + 360 * v}`, fill: "none", stroke: SHADE, "stroke-width": 230 * v,
+  "stroke-linecap": "round", "stroke-linejoin": "round" }, bg);
+
+// the three ritual rows from the home capture as a playful stack (each row appears once), measured in capture px
+const img = await capture("daily-home");
+const ROWS = st.pick({
+  tall: [[72, 1341, 1098, 1568], [72, 1605, 1098, 1832], [72, 1869, 1098, 2096]],
+  p916: [[91, 1205, 988, 1404], [91, 1436, 988, 1635], [91, 1667, 988, 1866]],
+});
+const CHECK = st.pick({ tall: [1008, 114], p916: [910, 100] });   // check circle centre: capture x, row-local capture y
+const RADIUS = st.pick({ tall: 66, p916: 58 });
+const place = [{ x: 70, rot: -3.5, done: true }, { x: 110, rot: 2.5, done: true }, { x: 60, rot: -1.5, done: false }];
+const fx = L.w / 1090;
+place.forEach((p, i) => {
+  const region = ROWS[i];
+  const c = crop(st, img, { region, x: p.x * fx, y: y1 + i * L.step, w: L.w, rotate: p.rot, radius: RADIUS, edge: DEEP, edgeH: 18, z: 20 + i, shadow: "rgba(10,60,40,0.40)" });
+  if (p.done) { const [bx, by] = c.at(CHECK[0], region[1] + CHECK[1]); checkBadge(c.el, bx, by, L.badge, { z: 5 }); }
+});
+
+// confetti around the finished checks
+const fg = svgLayer(st, 40);
+const yy = (y) => y1 + (y - 1060) * v;
+sparkle(fg, 1190, yy(1030), 44, C.white);
+sparkle(fg, 1215, yy(1130), 22, C.sunshine);
+s("circle", { cx: 1100, cy: yy(960), r: 13, fill: C.sunshine }, fg);
+sparkle(fg, 1215, yy(1500), 30, C.white);
+s("circle", { cx: 1060, cy: yy(1470), r: 11, fill: C.white }, fg);
+sparkle(fg, 1010, yy(820), 36, C.sunshine);
+
+await ready();
+</script></body></html>
