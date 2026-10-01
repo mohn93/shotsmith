@@ -14,12 +14,21 @@ export const fetchTransport = (timeoutMs = 120_000): Transport => async (req) =>
   }
 };
 
+interface Reason { message?: string; code?: string; errors?: Reason[] }
+
+// A connect failure to a host with several addresses has an AggregateError cause with an empty message, so fall back
+// to its code, then to the first address that says anything.
+function reasonOf(c: Reason | undefined): string {
+  if (!c) return "";
+  return c.message || c.code || (c.errors ?? []).map(reasonOf).find(Boolean) || "";
+}
+
 // Names the call (without its query string) and the reason; fetch itself says only "fetch failed".
 function transportError(req: HttpRequest, e: unknown, timeoutMs: number): Error {
   const u = new URL(req.url);
   const call = `${req.method} ${u.origin}${u.pathname}`;
-  const err = e as { name?: string; message?: string; cause?: { message?: string } };
-  const cause = err.cause?.message ?? err.message ?? String(e);
+  const err = e as { name?: string; message?: string; cause?: Reason };
+  const cause = reasonOf(err.cause) || err.message || String(e);
   if (err.name === "TimeoutError") return new Error(`${call} timed out after ${timeoutMs / 1000} s`);
   if (/redirect/i.test(cause)) return new Error(`${call} answered with a redirect; Shotsmith does not follow redirects for store calls`);
   return new Error(`${call} failed: ${cause}`);

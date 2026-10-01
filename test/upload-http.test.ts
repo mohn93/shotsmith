@@ -1,6 +1,6 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AscClient } from "../src/upload/apple.js";
 import { type HttpRequest, type HttpResponse, type Method, StoreError, type Transport, fetchTransport, retrying } from "../src/upload/http.js";
 import { PlayClient } from "../src/upload/play.js";
@@ -120,5 +120,19 @@ describe("error statuses with a body that is not JSON", () => {
   it("keep the not JSON error on a 2xx", async () => {
     await expect(new AscClient({ transport: answer(200), token: () => "t" }).request("GET", "/v1/apps")).rejects.toThrow(/App Store Connect answered with something that is not JSON/);
     await expect(new PlayClient({ transport: answer(200), token: async () => "t" }, "com.example.demo").openEdit()).rejects.toThrow(/Google Play answered with something that is not JSON/);
+  });
+});
+
+describe("fetchTransport on a host with several addresses", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("gives a reason when the cause is an AggregateError with an empty message", async () => {
+    const each = Object.assign(new Error("connect ECONNREFUSED ::1:1"), { code: "ECONNREFUSED" });
+    const cause = Object.assign(new AggregateError([each], ""), { code: "ECONNREFUSED" });
+    vi.stubGlobal("fetch", async () => { throw new TypeError("fetch failed", { cause }); });
+    await expect(fetchTransport()({ method: "GET", url: "https://api.example.test/v1/apps?x=1" })).rejects.toThrow(/^GET https:\/\/api\.example\.test\/v1\/apps failed: (ECONNREFUSED|connect ECONNREFUSED)/);
+    // Without a code on the aggregate, the first address that says something is used.
+    vi.stubGlobal("fetch", async () => { throw new TypeError("fetch failed", { cause: new AggregateError([each], "") }); });
+    await expect(fetchTransport()({ method: "GET", url: "https://api.example.test/v1/apps" })).rejects.toThrow(/failed: connect ECONNREFUSED ::1:1$/);
   });
 });
