@@ -48,6 +48,7 @@ The strongest result so far, and the one that shipped (`previews/cinematic.jpg`)
 - Build every screen as a paused GSAP timeline; the still is the last frame, and the same timeline renders the App Preview video (886x1920, 30 fps) through `window.__seek`. Video costs about 30% more effort and is worth it.
 - **Known failures:** every screen fell into headline + phone + pop-out card; a weak illustration (an "@" glyph) looked like clip art, so drop art that doesn't land; the overlay font differed from the capture's font during the counter animation; thousands of SVG nodes made frames take 4.8 s (canvas dots brought it to 0.45 s).
 - **Reference:** `reference/svg-gsap/lib.js` (frame, card lifting, ring arcs), `scenes.js`, `preview.html` (video timeline), `mapdata.py` (map sampling). Video frames: `previews/svg-gsap-video-frames.jpg`.
+- **Example:** `reference/examples/daily-arc` (flat color blocks, phone-less card stacks, no motion).
 
 ## Panorama
 
@@ -56,6 +57,7 @@ The strongest result so far, and the one that shipped (`previews/cinematic.jpg`)
 - Check with `npx shotsmith strip <target>`: it joins the screens and flags seam steps down the full height. Per-page glows and shadows are the usual cause.
 - **Known failures:** the globe hid behind a phone; a card duplicated content under it; the cable ran straight down a seam; poses repeated on every screen; phone glows made brightness steps at seams; headlines sat at different heights, visible only in the joined strip.
 - **Reference:** `reference/panorama/strip.html`.
+- **Example:** `reference/examples/elsewhere` (five-screen golden-hour panorama, iPhone and Android).
 
 ## Match a listing
 
@@ -80,3 +82,5 @@ Translate every taste word into a concrete decision in the direction brief (SKIL
 | Exclusions ("no 3D", "no neon", "no dark mode") | Remove those tools and treatments even if a preset uses them; restate them in the brief |
 
 Example: "calm, warm, bookish, like Things 3 or Day One, paper texture, serif headline, terracotta and sage, no 3D, no dark mode" becomes a light editorial direction. Warm off-white paper made from GLSL fiber noise with soft vignetting; a licensed serif display (e.g. an OFL serif) over a humanist sans; terracotta accent and sage secondary on neutral text; phones upright or gently cropped with layered soft shadows; small SVG ornaments (rules, marginal notes) instead of 3D; generous margins; one idea per screen. It borrows the one-idea-per-screen structure from Cinematic and the flat framing from SVG editorial, and drops Three.js because of "no 3D".
+
+The Savory example (`reference/examples/savory`) was built from a request like this: warm food magazine, serif headlines, paper texture, cream and tomato, no dark backgrounds, no 3D.

@@ -15,7 +15,7 @@ This skill targets Shotsmith 0.1.0. Before a workspace exists run `npx shotsmith
 
 **If the user already described a look** (mood, colors, type, textures, apps they like, things to avoid), do not ask them to pick a style: their words become the direction brief in step 3.
 
-**Otherwise** ask in one AskUserQuestion call (one chat message where that tool does not exist). First question: "Describe the feel you want: mood, apps whose screenshots you like, colors, typography, anything to avoid. Or start from one of these directions." Options: the five styles in `styles.md` (Cinematic first), with the user's free text arriving through "Other". Before asking, show the matching `previews/*.jpg` (SendUserFile, or attach them) and say they are examples made for other apps, not templates.
+**Otherwise** ask in one AskUserQuestion call (one chat message where that tool does not exist). First question: "Describe the feel you want: mood, apps whose screenshots you like, colors, typography, anything to avoid. Or start from one of these directions." Options: the five styles in `styles.md` (Cinematic first), with the user's free text arriving through "Other". Before asking, show the matching style previews (`previews/cinematic.jpg`, `previews/three-studio.jpg`, `previews/glsl-shader.jpg`, `previews/svg-gsap.jpg`, `previews/panorama.jpg`, made for DNS Kit) and the complete example sets (`previews/savory.jpg`, `previews/elsewhere.jpg`, `previews/daily-arc.jpg`, fictional apps). Send them with SendUserFile or attach them, and say they are examples made for other apps, not templates.
 
 In the same call, ask whatever else is missing:
 
@@ -129,7 +129,7 @@ await ready();
 - Words only through `t()`, `t.el()` and `headline()`. `shotsmith claims` fails on any visible word that is not a claim, and on a claim element that shows other text. Decorative symbols go in CSS `content` or list markers (see `kit.md`).
 - `capture(name)` loads a capture for page art without a frame, such as rows cropped onto canvases.
 - Shared code goes in `pages/*.js`, imported with `./`. The render server provides `shotsmith/kit`, `three` and `gsap` through an import map; do not write your own, and never set `window.__ready` yourself.
-- Reuse art from `reference/README.md`; it lists what to take and what the kit replaces.
+- Start from the closest complete example in `reference/examples/` (`reference/examples/savory`: custom editorial direction; `reference/examples/elsewhere`: panorama with Three.js; `reference/examples/daily-arc`: flat bold blocks and phone-less card stacks). Each has its config, claims in two locales, brief, store copy and pages. Reuse art from the DNS Kit folders through `reference/README.md`.
 
 ## 5. Use the right tech
 

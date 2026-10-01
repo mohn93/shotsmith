@@ -14,7 +14,7 @@ const apps = fs.readdirSync(DIR, { withFileTypes: true })
 const ignored = (rel: string) => { try { execFileSync("git", ["check-ignore", "-q", rel], { cwd: ROOT }); return true; } catch { return false; } };
 
 describe("examples", () => {
-  it("exist", () => expect(apps.length).toBeGreaterThan(0));
+  it("are the three ported trial apps", () => expect(apps).toEqual(["daily-arc", "elsewhere", "savory"]));
 
   for (const app of apps) describe(app, () => {
     const root = path.join(DIR, app);

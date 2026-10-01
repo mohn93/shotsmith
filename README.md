@@ -17,6 +17,10 @@ The agent skill (`skills/store-screenshots`) drives the whole flow: taste, claim
 - Claude Code: `/plugin marketplace add mohn93/shotsmith`, then `/plugin install shotsmith@shotsmith`.
 - Other agents: `shotsmith skill install` copies it to `~/.claude/skills/store-screenshots`; `--dir <folder>` installs it elsewhere, and `shotsmith skill path` prints where the bundled copy is.
 
+## Examples
+
+[examples/](examples/) holds three fictional apps (Savory, Elsewhere, Daily Arc) for iPhone and Android in English and German, each built with no findings. `npm run examples` builds them.
+
 ## Commands
 
 | Command | Does |
