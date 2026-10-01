@@ -19,7 +19,7 @@ describe("planPlaySet", () => {
 
   it("replaces the whole slot when content or order differs", () => {
     const s = planPlaySet(local(["a", "b"]), [{ id: "2", sha256: "b" }, { id: "1", sha256: "a" }]);
-    expect(s).toMatchObject({ status: "change", keep: [], remove: [{ id: "2", checksum: "b", reason: "replaced" }, { id: "1", checksum: "a", reason: "replaced" }] });
+    expect(s).toMatchObject({ status: "change", keep: [], remove: [{ id: "2", checksum: "b", reason: "replaced", fileName: null }, { id: "1", checksum: "a", reason: "replaced", fileName: null }] });
     expect(s.upload.map((u) => u.checksum)).toEqual(["a", "b"]);
   });
 });
@@ -57,6 +57,16 @@ describe("planPlay", () => {
     const fake = new FakePlay();
     fake.forbidden = true;
     await expect(planPlay(cfg, (await localSets(cfg, "play")).sets, deps(fake))).rejects.toThrow(/\(403\).*lacks permission.*store listing/);
+  });
+
+  it("explains a 401 that means insufficient permissions like a 403, and any other 401 as a request Google did not accept", async () => {
+    const cfg = await uploadWorkspace();
+    const { sets } = await localSets(cfg, "play");
+    const fake = new FakePlay();
+    fake.insufficient401 = true;
+    await expect(planPlay(cfg, sets, deps(fake))).rejects.toThrow(/\(401\): The current user has insufficient permissions to perform the requested operation\. The service account lacks permission.*store listing/);
+    const bad = new FakePlay();
+    await expect(planPlay(cfg, sets, { transport: bad.transport, token: async () => "wrong" })).rejects.toThrow(/\(401\): Request had invalid authentication credentials\. Google did not accept the request: check the service account key, and that the account has access to this app in Play Console/);
   });
 
   it("needs a package name", async () => {

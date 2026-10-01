@@ -85,7 +85,7 @@ const base = { store: "apple" as const, app: "com.example.demo", version: "1.1",
 describe("plans", () => {
   it("digests what would change, not remote ids or the time", () => {
     const a = makePlan({ ...base, sets: [set()] }, new Date(0));
-    const b = makePlan({ ...base, sets: [set({ keep: [{ id: "99", file: "export/en/iphone-6.9/01-a.jpg" }], remove: [{ id: "98", checksum: "old", reason: "superseded" }] })] }, new Date(1e12));
+    const b = makePlan({ ...base, sets: [set({ keep: [{ id: "99", file: "export/en/iphone-6.9/01-a.jpg" }], remove: [{ id: "98", checksum: "old", reason: "superseded", fileName: "other-name.jpg" }] })] }, new Date(1e12));
     expect(b.digest).toBe(a.digest);
     expect(makePlan({ ...base, sets: [set({ remove: [{ id: "2", checksum: "other", reason: "superseded" }] })] }).digest).not.toBe(a.digest);
     expect(makePlan({ ...base, version: "1.2", sets: [set()] }).digest).not.toBe(a.digest);
@@ -100,7 +100,7 @@ describe("plans", () => {
     const saved = readPlan(cfg, "apple");
     expect(saved).toEqual(plan);
     expect(() => samePlan(cfg, saved, plan)).not.toThrow();
-    expect(() => samePlan(cfg, saved, makePlan({ ...base, sets: [] }))).toThrow(/differs from the saved plan.*Nothing was changed/);
+    expect(() => samePlan(cfg, saved, makePlan({ ...base, sets: [] }))).toThrow(/differs from the saved plan.*Nothing was changed\. Run shotsmith upload apple without --apply again, with the same options, and show the user the new plan/);
     expect(readPlan(cfg, "play")).toBeNull();
   });
 
@@ -113,17 +113,21 @@ describe("plans", () => {
   });
 
   it("describes a plan and a report", () => {
-    const plan = makePlan({ ...base, sets: [set(), set({ storeLocale: "de-DE", status: "unchanged", remove: [], upload: [] })], problems: ["something"] });
+    const named = set({ storeLocale: "fr-FR", remove: [{ id: "5", checksum: "x", reason: "superseded", fileName: "old-01.jpg" }, { id: "6", checksum: null, reason: "failed", fileName: null }, { id: "7", checksum: "y", reason: "duplicate", fileName: "old-02.jpg" }] });
+    const plan = makePlan({ ...base, sets: [set(), set({ storeLocale: "de-DE", status: "unchanged", remove: [], upload: [] }), named], problems: ["something"] });
     expect(describePlan(plan)).toEqual([
       "App Store Connect plan for com.example.demo, version 1.1",
       "en-US iphone-6.9 (APP_IPHONE_67): keep 1, delete 1 (1 superseded), upload 1",
       "  order: 01-a.jpg, 02-b.jpg",
       "de-DE iphone-6.9 (APP_IPHONE_67): unchanged",
+      "fr-FR iphone-6.9 (APP_IPHONE_67): keep 1, delete 3 (1 superseded, 1 failed, 1 duplicate), upload 1",
+      "  delete: old-01.jpg, old-02.jpg",
+      "  order: 01-a.jpg, 02-b.jpg",
       "problem: something",
     ]);
     const head = { locale: "en", storeLocale: "en-US", target: "iphone-6.9", slot: "APP_IPHONE_67" };
     expect(describeReport({
-      store: "apple", app: "a", version: "1.1", digest: "d", editId: null, startedAt: "", finishedAt: "", ok: true, error: null,
+      store: "apple", app: "a", version: "1.1", digest: "d", editId: null, editExpiresAt: null, startedAt: "", finishedAt: "", ok: true, error: null,
       sets: [
         { ...head, status: "changed", deleted: ["2"], uploaded: [{ file: "f", id: "3" }], order: [{ file: "e", id: "1", checksum: "x" }, { file: "f", id: "3", checksum: "y" }] },
         { ...head, storeLocale: "de-DE", status: "unchanged", deleted: [], uploaded: [], order: [] },

@@ -43,7 +43,20 @@ describe("runApple", () => {
     const out = await runApple(cfg, { apply: true }, apple(fake));
     expect(out).toMatchObject({ ok: false, exitCode: 2, json: { error: { message: expect.stringMatching(/could not process.*report: export\/upload-report-apple\.json/s) }, reportFile: "export/upload-report-apple.json" } });
     expect(out.lines).toEqual(expect.arrayContaining([expect.stringMatching(/failed after deleting/), expect.stringMatching(/^Upload failed: .*could not process/), "Report written to export/upload-report-apple.json."]));
+    const partly = out.lines.findIndex((l) => l.startsWith("App Store Connect was partly changed: the screenshots listed above were deleted or uploaded and stay in the version, which may now be incomplete. Sets not listed were not touched. Run shotsmith upload apple again with the same options, show the user the new plan, and apply after they confirm. Do not submit the version until then."));
+    expect(partly).toBeGreaterThan(out.lines.findIndex((l) => /failed after deleting/.test(l)));
+    expect(partly).toBe(out.lines.findIndex((l) => l.startsWith("Upload failed:")) - 1);
     expect((JSON.parse(fs.readFileSync(reportPath(cfg, "apple"), "utf8")) as UploadReport).ok).toBe(false);
+  });
+
+  it("says the store already matches when every set is unchanged", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakeAsc();
+    await runApple(cfg, {}, apple(fake));
+    await runApple(cfg, { apply: true }, apple(fake));
+    const again = await runApple(cfg, {}, apple(fake));
+    expect(again).toMatchObject({ ok: true, exitCode: 0 });
+    expect(again.lines.at(-1)).toBe("Plan written to export/upload-plan-apple.json. The store already matches the exports; nothing to upload.");
   });
 
   it("reports export problems without credentials or a connection", async () => {
@@ -68,7 +81,7 @@ describe("runPlay", () => {
     const planned = await runPlay(cfg, {}, play(fake));
     expect(planned.lines.at(-1)).toMatch(/--apply to stage.*nothing goes live until --commit/);
     const staged = await runPlay(cfg, { apply: true }, play(fake));
-    expect(staged.lines.at(-1)).toBe("Staged and validated in draft edit 1002; nothing is live yet. After the user confirms, run: shotsmith upload play --commit 1002");
+    expect(staged.lines.at(-1)).toBe(`Staged and validated in draft edit 1002 (expires ${new Date(9999999999 * 1000).toISOString()}); nothing is live yet. After the user confirms, run: shotsmith upload play --commit 1002`);
     const committed = await runPlay(cfg, { commit: "1002" }, play(fake));
     expect(committed).toMatchObject({ ok: true, exitCode: 0, json: { committed: "1002" } });
   });
@@ -79,7 +92,8 @@ describe("runPlay", () => {
     await runPlay(cfg, {}, play(fake));
     await runPlay(cfg, { apply: true }, play(fake));
     await runPlay(cfg, { commit: "1002" }, play(fake));
-    await runPlay(cfg, {}, play(fake));
+    const again = await runPlay(cfg, {}, play(fake));
+    expect(again.lines.at(-1)).toBe("Plan written to export/upload-plan-play.json. The store already matches the exports; nothing to upload.");
     expect((await runPlay(cfg, { apply: true }, play(fake))).lines.at(-1)).toBe("Nothing to change; no edit was kept.");
   });
 

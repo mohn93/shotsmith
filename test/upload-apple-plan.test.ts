@@ -34,10 +34,10 @@ describe("planAppleSet", () => {
     const s = planAppleSet(local(["a", "b", "c"]), [remote("1", "a"), remote("2", "a"), remote("3", "old"), remote("4", "b", "FAILED"), remote("5", "c", "UPLOAD_COMPLETE")]);
     expect(s.keep.map((k) => k.id)).toEqual(["1"]);
     expect(s.remove).toEqual([
-      { id: "2", checksum: "a", reason: "duplicate" },
-      { id: "3", checksum: "old", reason: "superseded" },
-      { id: "4", checksum: "b", reason: "failed" },
-      { id: "5", checksum: "c", reason: "processing" },
+      { id: "2", checksum: "a", reason: "duplicate", fileName: "2.jpg" },
+      { id: "3", checksum: "old", reason: "superseded", fileName: "3.jpg" },
+      { id: "4", checksum: "b", reason: "failed", fileName: "4.jpg" },
+      { id: "5", checksum: "c", reason: "processing", fileName: "5.jpg" },
     ]);
     expect(s.upload.map((u) => u.checksum)).toEqual(["b", "c"]);
   });
@@ -109,7 +109,9 @@ describe("planApple", () => {
   it("explains a rejected key and an unknown app", async () => {
     const { cfg, sets, fake } = await setup();
     fake.status401 = true;
-    await expect(planApple(cfg, sets, {}, deps(fake))).rejects.toThrow(/did not accept the API key/);
+    const err = await planApple(cfg, sets, {}, deps(fake)).catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/missing or invalid\. App Store Connect did not accept the API key/);
+    expect((err as Error).message).not.toContain("..");
     fake.status401 = false;
     fake.apps = [];
     await expect(planApple(cfg, sets, {}, deps(fake))).rejects.toThrow(/No app with bundle id com\.example\.demo/);

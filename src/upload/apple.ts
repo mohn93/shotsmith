@@ -54,7 +54,7 @@ export class AscClient {
 }
 
 function ascMessage(method: string, url: string, status: number, data: Json): string {
-  const detail = ((data.errors ?? []) as Json[]).map((e) => e.detail ?? e.title).filter(Boolean).join("; ");
+  const detail = ((data.errors ?? []) as Json[]).map((e) => e.detail ?? e.title).filter(Boolean).join("; ").replace(/\.+$/, "");
   const what = `${method} ${url.slice(ASC.length).split("?")[0]} failed (${status})${detail ? `: ${detail}` : ""}`;
   if (status === 401) return `${what}. App Store Connect did not accept the API key: check the issuer id, key id and key file`;
   if (status === 403) return `${what}. The API key's role cannot do this; it needs the App Manager or Admin role`;
@@ -107,7 +107,7 @@ export function planAppleSet(local: LocalSet, remote: RemoteShot[]): PlannedSet 
   const wanted = new Set(local.files.map((f) => f.md5));
   const reason = (r: RemoteShot): RemoveReason =>
     r.state === "FAILED" ? "failed" : r.state !== "COMPLETE" ? "processing" : r.checksum && wanted.has(r.checksum) ? "duplicate" : "superseded";
-  const remove = remote.filter((r) => !claimed.has(r.id)).map((r) => ({ id: r.id, checksum: r.checksum, reason: reason(r) }));
+  const remove = remote.filter((r) => !claimed.has(r.id)).map((r) => ({ id: r.id, checksum: r.checksum, reason: reason(r), fileName: r.fileName }));
   const unchanged = !upload.length && !remove.length && remote.map((r) => r.id).join() === keep.map((k) => k.id).join();
   return {
     locale: local.locale, storeLocale: local.storeLocale, target: local.target, slot: local.slot,
@@ -154,7 +154,7 @@ export async function applyApple(cfg: ResolvedConfig, local: LocalSet[], o: { ve
   const c = new AscClient(deps);
   const run: Run = { log: deps.log ?? (() => {}), now, sleep: deps.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))) };
   const report: UploadReport = {
-    store: "apple", app: fresh.plan.app, version: fresh.plan.version, digest: fresh.plan.digest, editId: null,
+    store: "apple", app: fresh.plan.app, version: fresh.plan.version, digest: fresh.plan.digest, editId: null, editExpiresAt: null,
     startedAt: new Date(now()).toISOString(), finishedAt: "", ok: false, error: null, sets: [],
   };
   try {

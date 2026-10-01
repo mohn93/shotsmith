@@ -29,7 +29,11 @@ export class PlayClient {
 
   private slot = (edit: string, lang: string, slot: string) => `${this.api}/${edit}/listings/${encodeURIComponent(lang)}/${slot}`;
 
-  async openEdit(): Promise<string> { return String((await this.request("POST", this.api, "{}")).id); }
+  async openEdit(): Promise<{ id: string; expiresAt: string | null }> {
+    const d = await this.request("POST", this.api, "{}");
+    const at = new Date(Number(d.expiryTimeSeconds) * 1000);
+    return { id: String(d.id), expiresAt: d.expiryTimeSeconds && !Number.isNaN(at.getTime()) ? at.toISOString() : null };
+  }
   async deleteEdit(edit: string): Promise<void> { await this.request("DELETE", `${this.api}/${edit}`); }
   async languages(edit: string): Promise<string[]> { return ((await this.request("GET", `${this.api}/${edit}/listings`)).listings ?? []).map((l: Json) => String(l.language)); }
   async images(edit: string, lang: string, slot: string): Promise<PlayImage[]> {
@@ -45,10 +49,13 @@ export class PlayClient {
 }
 
 function playMessage(method: string, url: string, status: number, data: Json): string {
-  const detail = data.error?.message;
+  const detail = typeof data.error?.message === "string" ? data.error.message.replace(/\.+$/, "") : undefined;
   const what = `${method} ${url.replace(/^.*\/applications\//, "applications/").split("?")[0]} failed (${status})${detail ? `: ${detail}` : ""}`;
-  if (status === 403) return `${what}. The service account lacks permission for this app: in Play Console, Users and permissions, give it access to the app with permission to edit the store listing`;
-  if (status === 401) return `${what}. Google did not accept the access token; check the service account key`;
+  // Google answers some permission failures with 401 and "insufficient permissions".
+  if (status === 403 || (status === 401 && /insufficient permissions/i.test(data.error?.message ?? ""))) {
+    return `${what}. The service account lacks permission for this app: in Play Console, Users and permissions, give it access to the app with permission to edit the store listing`;
+  }
+  if (status === 401) return `${what}. Google did not accept the request: check the service account key, and that the account has access to this app in Play Console`;
   return what;
 }
 
@@ -64,7 +71,7 @@ export function planPlaySet(local: LocalSet, remote: PlayImage[]): PlannedSet {
     locale: local.locale, storeLocale: local.storeLocale, target: local.target, slot: local.slot,
     status: same ? "unchanged" : "change",
     keep: same ? remote.map((r, i) => ({ id: r.id, file: local.files[i].rel })) : [],
-    remove: same ? [] : remote.map((r) => ({ id: r.id, checksum: r.sha256, reason: "replaced" as const })),
+    remove: same ? [] : remote.map((r) => ({ id: r.id, checksum: r.sha256, reason: "replaced" as const, fileName: null })),
     upload: same ? [] : local.files.map((f) => ({ file: f.rel, checksum: f.sha256 })),
     order: local.files.map((f) => f.rel),
   };
@@ -88,7 +95,7 @@ export async function readPlay(c: PlayClient, edit: string, local: LocalSet[]): 
 export async function planPlay(cfg: ResolvedConfig, local: LocalSet[], deps: PlayDeps): Promise<UploadPlan> {
   const pkg = playPackage(cfg);
   const c = new PlayClient(deps, pkg);
-  const edit = await c.openEdit();
+  const { id: edit } = await c.openEdit();
   try {
     const { pairs, problems } = await readPlay(c, edit, local);
     return makePlan({ store: "play", app: pkg, version: null, sets: pairs.map((p) => p.plan), problems }, new Date(deps.now?.() ?? Date.now()));
@@ -110,15 +117,16 @@ export async function applyPlay(cfg: ResolvedConfig, local: LocalSet[], saved: U
   const c = new PlayClient(deps, pkg);
   const now = deps.now ?? Date.now;
   const log = deps.log ?? (() => {});
-  const edit = await c.openEdit();
-  let keepEdit = false;
+  const { id: edit, expiresAt } = await c.openEdit();
+  // keepEdit: the edit is staged and stays; released: the failure path has already dealt with the edit.
+  let keepEdit = false, released = false;
   try {
     const { pairs, problems } = await readPlay(c, edit, local);
     if (problems.length) throw new Error(`The plan has problems, so nothing was changed:\n- ${problems.join("\n- ")}`);
     const fresh = makePlan({ store: "play", app: pkg, version: null, sets: pairs.map((p) => p.plan), problems }, new Date(now()));
     samePlan(cfg, saved, fresh);
     const report: UploadReport = {
-      store: "play", app: pkg, version: null, digest: fresh.digest, editId: null,
+      store: "play", app: pkg, version: null, digest: fresh.digest, editId: null, editExpiresAt: null,
       startedAt: new Date(now()).toISOString(), finishedAt: "", ok: false, error: null, sets: [],
     };
     try {
@@ -131,18 +139,24 @@ export async function applyPlay(cfg: ResolvedConfig, local: LocalSet[], saved: U
       if (report.sets.some((s) => s.status === "changed")) {
         await c.validate(edit);
         report.editId = edit;
+        report.editExpiresAt = expiresAt;
         keepEdit = true;
       }
       report.ok = true;
     } catch (e) {
-      // The edit is deleted below, so nothing this run staged reaches the listing.
+      // Nothing is committed either way, so nothing this run staged reaches the listing. The text says whether the edit is gone.
       for (const s of report.sets) if (s.status === "changed" || s.status === "failed") s.status = "discarded";
-      report.error = `${(e as Error).message}. The draft edit was discarded, so the Google Play listing is unchanged`;
+      released = true;
+      const gone = await c.deleteEdit(edit).then(() => true, () => false);
+      const message = (e as Error).message.replace(/\.+$/, "");
+      report.error = gone
+        ? `${message}. The draft edit was discarded, so the Google Play listing is unchanged`
+        : `${message}. The draft edit ${edit} could not be deleted; it holds unvalidated changes and will expire on its own. Nothing was committed, so the Google Play listing is unchanged`;
     }
     report.finishedAt = new Date(now()).toISOString();
     return report;
   } finally {
-    if (!keepEdit) await c.deleteEdit(edit).catch(() => {});
+    if (!keepEdit && !released) await c.deleteEdit(edit).catch(() => {});
   }
 }
 
@@ -183,7 +197,7 @@ export async function commitPlay(cfg: ResolvedConfig, editId: string, deps: Play
     await c.commit(editId);
   } catch (e) {
     if (e instanceof StoreError && (e.status === 404 || /edit has been deleted/i.test(e.message))) {
-      throw new Error(`Google Play no longer has edit ${editId}: an edit is discarded when anything else changes the app first, or when it expires. Run shotsmith upload play --apply again, show the user the result, and commit the new edit`);
+      throw new Error(`Google Play no longer has edit ${editId}: an edit is discarded when anything else changes the app first, or when it expires, or it was already committed (check Play Console). Run shotsmith upload play --apply again, show the user the result, and commit the new edit`);
     }
     throw e;
   }

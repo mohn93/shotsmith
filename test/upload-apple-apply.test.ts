@@ -137,6 +137,54 @@ describe("applyApple", () => {
     const report = await applyApple(cfg, sets, {}, plan, deps(fake));
     expect(report.error).toMatch(/still processing after 5 minutes/);
     expect(clock).toBeGreaterThanOrEqual(5 * 60_000);
+    // The deadline is checked after each wait, and a wait is at most 10 seconds.
+    expect(clock).toBeLessThan(5 * 60_000 + 10_000);
+  });
+
+  it("caps the wait at 10 seconds in later rounds", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    fake.processingPolls = 10;
+    const waits: number[] = [];
+    const report = await applyApple(cfg, sets, {}, plan, { ...deps(fake), sleep: async (ms) => { waits.push(ms); clock += ms; } });
+    expect(report.ok).toBe(true);
+    // The first set takes eleven rounds, so ten waits.
+    expect(waits.slice(0, 10)).toEqual([2000, 3000, 4500, 6750, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000]);
+  });
+
+  it("reorders a set whose screenshots are all there, with one write and no uploads", async () => {
+    const { cfg, sets, fake, plan } = await planned((f, s) => {
+      f.seed("loc-en", "APP_IPHONE_67", [{ checksum: s[0].files[1].md5 }, { checksum: s[0].files[0].md5 }]);
+      f.seed("loc-de", "APP_IPHONE_67", s[1].files.map((x) => ({ checksum: x.md5 })));
+    });
+    const enSet = fake.setFor("loc-en", "APP_IPHONE_67")!.id;
+    const report = await applyApple(cfg, sets, {}, plan, deps(fake));
+    expect(report.ok).toBe(true);
+    expect(fake.writes()).toEqual([`PATCH /v1/appScreenshotSets/${enSet}/relationships/appScreenshots`]);
+    expect(fake.checksums("loc-en", "APP_IPHONE_67")).toEqual(sets[0].files.map((f) => f.md5));
+    expect(report.sets.map((s) => [s.storeLocale, s.status])).toEqual([["en-US", "changed"], ["de-DE", "unchanged"]]);
+  });
+
+  it("fails when App Store Connect accepts the ordering but leaves the order unchanged", async () => {
+    const { cfg, sets, fake, plan } = await planned((f, s) => {
+      f.seed("loc-en", "APP_IPHONE_67", [{ checksum: s[0].files[1].md5 }, { checksum: s[0].files[0].md5 }]);
+    });
+    fake.ignoreReorder = true;
+    const report = await applyApple(cfg, sets, {}, plan, deps(fake));
+    expect(report.ok).toBe(false);
+    expect(report.error).toMatch(/en-US APP_IPHONE_67: .*differs from the export/);
+    expect(report.sets[0].status).toBe("failed");
+  });
+
+  it("is refused by the fake when a request breaks the API's rules", async () => {
+    const fake = new FakeAsc();
+    const c = new AscClient(deps(fake));
+    const [id] = fake.seed("loc-en", "APP_IPHONE_67", [{ checksum: "x" }]);
+    await expect(c.request("POST", "/v1/appScreenshotSets", { data: { type: "wrong", attributes: {}, relationships: {} } })).rejects.toThrow(/\(409\).*data\.type/);
+    await expect(c.request("PATCH", `/v1/appScreenshots/${id}`, { data: { type: "wrong", id, attributes: {} } })).rejects.toThrow(/\(409\).*data\.type/);
+    await expect(c.request("PATCH", `/v1/appScreenshots/${id}`, { data: { type: "appScreenshots", id: "other", attributes: {} } })).rejects.toThrow(/\(409\).*does not match the path id/);
+    await expect(c.request("GET", "/v1/appStoreVersions/ver1/appStoreVersionLocalizations?limit=201")).rejects.toThrow(/\(400\).*limit/);
+    expect((await c.raw({ method: "PUT", url: `${fake.uploadHost}/${id}/0`, body: new Uint8Array(1) })).status).toBe(400);
+    expect((await c.raw({ method: "PUT", url: `${fake.uploadHost}/${id}/0`, headers: { "Content-Type": "image/jpeg" }, body: new Uint8Array(1) })).status).toBe(200);
   });
 });
 

@@ -26,9 +26,10 @@ function playDeps(root: string, json?: boolean): PlayDeps {
   return { transport, token: playTokenSource(key, transport), log: logger(json) };
 }
 
-function print(out: UploadOutcome, json?: boolean): void {
+// In text mode a failed upload sends its "Upload failed:" line to stderr and the rest to stdout.
+export function print(out: UploadOutcome, json?: boolean): void {
   if (json) console.log(JSON.stringify({ ok: out.ok, ...out.json }));
-  else for (const line of out.lines) console.log(line);
+  else for (const line of out.lines) (out.exitCode === 2 && line.startsWith("Upload failed:") ? console.error : console.log)(line);
   process.exitCode = out.exitCode;
 }
 

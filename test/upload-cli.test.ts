@@ -3,12 +3,15 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { print } from "../src/cli/commands/upload.js";
+import type { UploadOutcome } from "../src/upload/run.js";
 import { ROOT } from "./helpers.js";
 import { uploadWorkspace } from "./upload/workspace.js";
 
 let home: string;
 beforeEach(() => { home = fs.mkdtempSync(path.join(os.tmpdir(), "shotsmith-home-")); });
+afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
 
 // A fresh HOME and no SHOTSMITH_* variables, so no real credentials are ever found.
 const run = (args: string[], env: NodeJS.ProcessEnv = {}) => {
@@ -66,6 +69,30 @@ describe("upload command", () => {
     const r = run(["upload", "apple", "--json", "-C", noApple.root]);
     expect(r.code).toBe(2);
     expect(json(r).error.message).toMatch(/no "apple"/);
+  });
+
+  it("prints the failure line to stderr in text mode and keeps --json to one object on stdout", () => {
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => {});
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitCode = process.exitCode;
+    try {
+      const failed: UploadOutcome = { ok: false, exitCode: 2, lines: ["en-US: failed", "Upload failed: boom", "Report written to r.json."], json: { error: { message: "boom" } } };
+      print(failed);
+      expect(stdout.mock.calls).toEqual([["en-US: failed"], ["Report written to r.json."]]);
+      expect(stderr.mock.calls).toEqual([["Upload failed: boom"]]);
+      expect(process.exitCode).toBe(2);
+      stdout.mockClear(); stderr.mockClear();
+      print(failed, true);
+      expect(stdout.mock.calls).toEqual([[JSON.stringify({ ok: false, error: { message: "boom" } })]]);
+      expect(stderr).not.toHaveBeenCalled();
+      stdout.mockClear();
+      print({ ok: false, exitCode: 1, lines: ["problem: x", "Upload failed: not this"], json: {} });
+      expect(stdout).toHaveBeenCalledTimes(2);
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stdout.mockRestore(); stderr.mockRestore();
+      process.exitCode = exitCode;
+    }
   });
 
   it("has every flag the skill names", () => {

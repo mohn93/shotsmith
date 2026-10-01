@@ -13,7 +13,8 @@ export interface PlannedSet {
   slot: string;
   status: "unchanged" | "change";
   keep: { id: string; file: string }[];
-  remove: { id: string; checksum: string | null; reason: RemoveReason }[];
+  // fileName: the remote file name, when the store gives one (App Store Connect); shown in the plan, not part of the digest.
+  remove: { id: string; checksum: string | null; reason: RemoveReason; fileName?: string | null }[];
   // checksum: MD5 for App Store Connect, sha256 for Google Play.
   upload: { file: string; checksum: string }[];
   // Workspace-relative export files in their final order.
@@ -36,6 +37,8 @@ export interface UploadReport {
   version: string | null;
   digest: string;
   editId: string | null;
+  // ISO time at which the kept Play edit expires; null for Apple and when no edit is kept, or the store gave none.
+  editExpiresAt: string | null;
   startedAt: string;
   finishedAt: string;
   ok: boolean;
@@ -84,7 +87,7 @@ export function samePlan(cfg: ResolvedConfig, saved: UploadPlan | null, fresh: U
   const cmd = `shotsmith upload ${fresh.store}`;
   if (!saved) throw new Error(`No saved plan at ${rel(cfg, planPath(cfg, fresh.store))}. Run ${cmd} without --apply, show the plan to the user, and apply only after they confirm`);
   if (saved.digest !== fresh.digest) {
-    throw new Error(`What would change differs from the saved plan: the exports, the store, the locales or the version changed since. Nothing was changed. Run ${cmd} without --apply again and show the user the new plan`);
+    throw new Error(`What would change differs from the saved plan: the exports, the store, the locales or the version changed since. Nothing was changed. Run ${cmd} without --apply again, with the same options, and show the user the new plan`);
   }
 }
 
@@ -96,6 +99,8 @@ export function describePlan(p: UploadPlan): string[] {
     if (s.status === "unchanged") { lines.push(`${head(s)}: unchanged`); continue; }
     const why = REASONS.map((r) => [r, s.remove.filter((x) => x.reason === r).length] as const).filter(([, n]) => n).map(([r, n]) => `${n} ${r}`).join(", ");
     lines.push(`${head(s)}: keep ${s.keep.length}, delete ${s.remove.length}${why ? ` (${why})` : ""}, upload ${s.upload.length}`);
+    const names = s.remove.map((x) => x.fileName).filter((n): n is string => !!n);
+    if (names.length) lines.push(`  delete: ${names.join(", ")}`);
     lines.push(`  order: ${s.order.map((f) => path.posix.basename(f)).join(", ")}`);
   }
   for (const problem of p.problems) lines.push(`problem: ${problem}`);

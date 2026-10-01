@@ -8,6 +8,7 @@ interface ShotSet { id: string; localizationId: string; display: string; shots: 
 
 const reply = (status: number, body?: unknown): HttpResponse => ({ status, text: body === undefined ? "" : JSON.stringify(body) });
 const fail = (status: number, detail: string) => reply(status, { errors: [{ status: String(status), detail }] });
+const entityError = (detail: string) => reply(409, { errors: [{ status: "409", code: "ENTITY_ERROR", detail }] });
 const md5 = (b: Buffer) => crypto.createHash("md5").update(b).digest("hex");
 
 // An in-memory App Store Connect. Responses follow the API's JSON:API shapes and the fields the DNS Kit uploader used
@@ -27,6 +28,8 @@ export class FakeAsc {
   // Items per list page; 0 returns whole lists.
   pageSize = 0;
   status401 = false;
+  // The relationship PATCH that orders a set answers 204 but leaves the order as it was.
+  ignoreReorder = false;
   private n = 0;
 
   // Puts screenshots into a set as if uploaded earlier. The state defaults to COMPLETE.
@@ -86,6 +89,7 @@ export class FakeAsc {
     }
     if (method === "POST" && p === "/v1/appScreenshotSets") {
       const d = body!.data;
+      if (d.type !== "appScreenshotSets") return entityError(`data.type must be appScreenshotSets, got ${d.type}`);
       return reply(201, { data: this.setJson(this.addSet(d.relationships.appStoreVersionLocalization.data.id, d.attributes.screenshotDisplayType)) });
     }
     if (method === "GET" && (m = p.match(/^\/v1\/appScreenshotSets\/([^/]+)\/appScreenshots$/))) {
@@ -96,13 +100,16 @@ export class FakeAsc {
     if (method === "PATCH" && (m = p.match(/^\/v1\/appScreenshotSets\/([^/]+)\/relationships\/appScreenshots$/))) {
       const set = this.sets.find((s) => s.id === m![1]);
       if (!set) return fail(404, "no such set");
-      const ids = (body!.data as Json[]).map((d) => String(d.id));
+      const items = body!.data as Json[];
+      if (items.some((d) => d.type !== "appScreenshots")) return entityError("data.type must be appScreenshots");
+      const ids = items.map((d) => String(d.id));
       if ([...ids].sort().join() !== [...set.shots].sort().join()) return fail(409, "The screenshots do not match the set");
-      set.shots = ids;
+      if (!this.ignoreReorder) set.shots = ids;
       return reply(204);
     }
     if (method === "POST" && p === "/v1/appScreenshots") {
       const d = body!.data;
+      if (d.type !== "appScreenshots") return entityError(`data.type must be appScreenshots, got ${d.type}`);
       const set = this.sets.find((s) => s.id === d.relationships.appScreenshotSet.data.id);
       if (!set) return fail(404, "no such set");
       if (set.shots.length >= 10) return fail(409, "You can upload a maximum of 10 screenshots per set.");
@@ -116,6 +123,8 @@ export class FakeAsc {
         return reply(200, { data: this.shotJson(shot) });
       }
       if (method === "PATCH") {
+        if (body!.data.type !== "appScreenshots") return entityError(`data.type must be appScreenshots, got ${body!.data.type}`);
+        if (body!.data.id !== m[1]) return entityError(`data.id ${body!.data.id} does not match the path id ${m[1]}`);
         const a = body!.data.attributes;
         const bytes = Buffer.concat([...shot.parts.entries()].sort((x, y) => x[0] - y[0]).map((e) => e[1]));
         shot.checksum = a.sourceFileChecksum;
@@ -144,11 +153,14 @@ export class FakeAsc {
     const [, id, offset] = url.pathname.split("/");
     const shot = this.shots.get(id);
     if (!shot) return reply(404);
+    // The part must carry the headers the reservation advertised.
+    if (req.headers?.["Content-Type"] !== "image/jpeg") return fail(400, "The upload part lacks the Content-Type header it was told to send");
     shot.parts.set(Number(offset), Buffer.from(req.body as Uint8Array));
     return reply(200);
   }
 
   private list(url: URL, items: Json[]): HttpResponse {
+    if (Number(url.searchParams.get("limit") ?? 0) > 200) return fail(400, "The limit parameter must not exceed 200");
     if (!this.pageSize) return reply(200, { data: items, links: { self: url.href } });
     const start = Number(url.searchParams.get("cursor") ?? 0);
     const links: Json = { self: url.href };

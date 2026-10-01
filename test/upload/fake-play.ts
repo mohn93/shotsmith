@@ -23,6 +23,12 @@ export class FakePlay {
   corruptUploads = false;
   // The service answers :validate with 400.
   failValidate = false;
+  // DELETE of an edit answers 500 and leaves the edit in place.
+  failDeleteEdit = false;
+  // Every request answers 401 with Google's "insufficient permissions" text.
+  insufficient401 = false;
+  // Listing GETs inside an edit leave out the last image.
+  dropLastImage = false;
   private imageN = 0;
   private editN = 1000;
 
@@ -47,6 +53,7 @@ export class FakePlay {
     this.calls.push(`${req.method} ${url.pathname}`);
     if (url.origin !== PLAY) return fail(404, `unknown host ${url.origin}`);
     if (req.headers?.Authorization !== "Bearer play-token") return fail(401, "Request had invalid authentication credentials.");
+    if (this.insufficient401) return fail(401, "The current user has insufficient permissions to perform the requested operation.");
     if (this.forbidden) return fail(403, "The caller does not have permission");
     const m = url.pathname.match(/^\/(upload\/)?androidpublisher\/v3\/applications\/([^/]+)\/edits(?:\/([^/:]+))?(?::(validate|commit))?(\/listings(?:\/([^/]+)\/([^/]+))?)?$/);
     if (!m) return fail(404, `no route ${url.pathname}`);
@@ -69,6 +76,7 @@ export class FakePlay {
     }
     if (!listings) {
       if (req.method !== "DELETE") return fail(404, "no route");
+      if (this.failDeleteEdit) return fail(500, "Backend error");
       this.edits.delete(editId);
       return reply(204);
     }
@@ -77,13 +85,17 @@ export class FakePlay {
     if (!slots) return fail(404, "Listing not found");
     const images = slots.get(slot) ?? [];
     if (upload && req.method === "POST") {
+      if (url.searchParams.get("uploadType") !== "media") return fail(400, "Upload type must be media");
       if (images.length >= 8) return fail(400, "Too many images");
       const bytes = Buffer.from(req.body as Uint8Array);
       const img = { id: `img${++this.imageN}`, sha256: this.corruptUploads ? "0".repeat(64) : hash("sha256", bytes), sha1: hash("sha1", bytes) };
       slots.set(slot, [...images, img]);
       return reply(200, { image: { ...img, url: `https://play-lh.example/${img.id}` } });
     }
-    if (req.method === "GET") return reply(200, images.length ? { images: images.map((i) => ({ ...i, url: `https://play-lh.example/${i.id}` })) } : {});
+    if (req.method === "GET") {
+      const shown = this.dropLastImage ? images.slice(0, -1) : images;
+      return reply(200, shown.length ? { images: shown.map((i) => ({ ...i, url: `https://play-lh.example/${i.id}` })) } : {});
+    }
     if (req.method === "DELETE") {
       slots.set(slot, []);
       return reply(200, { deleted: images });
