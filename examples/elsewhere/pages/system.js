@@ -360,7 +360,7 @@ export function pool(s, { top, height, rgb, a, z = 5 }) {
   return box(s.root, `left:0;top:${top}px;width:${s.W}px;height:${height}px;z-index:${z};` +
     `background:radial-gradient(closest-side, rgba(${rgb},${a}), rgba(${rgb},0) 100%)`);
 }
-// The trial's layered dusk shadow for a lifted card of height h (logical px), with a thin light rim.
+// A layered dusk shadow for a lifted card of height h (logical px), with a thin light rim.
 export function cardShadow(h, a = 0.5, spread = 1) {
   return `0 ${h * 0.28 * spread}px ${h * 0.5 * spread}px -${h * 0.12 * spread}px rgba(40,14,40,${a}), ` +
     `0 ${h * 0.08 * spread}px ${h * 0.14 * spread}px -${h * 0.04 * spread}px rgba(40,14,40,${a * 0.8}), 0 0 0 1.5px rgba(255,255,255,0.35)`;

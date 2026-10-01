@@ -37,7 +37,7 @@ paper(st, { mode: 1, z: 5, opacity: .8, light: 0, vignette: 0, fiber: 1.6, seed:
 
 // Tonight's pick card lifted over its own region, clipped to the card and the plate that overhangs it
 const card = lift(d, { region: L.region, mode: "cover", scale: 1.1 });
-await shapeLift(st, card, { region: L.region, shapes: [{ rect: L.card, r: L.r }, { circle: L.plate }],
+shapeLift(st, card, { region: L.region, shapes: [{ rect: L.card, r: L.r }, { circle: L.plate }],
   shadow: "drop-shadow(0 6px 8px rgba(90,30,15,.20)) drop-shadow(0 36px 40px rgba(90,30,15,.30))" });
 
 await ready();

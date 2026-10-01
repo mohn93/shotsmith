@@ -54,12 +54,17 @@ card.style.transform = "rotate(-2.5deg)";
 const fg = svgLayer(st, 30);
 const hl = lineBoxes(st, tt.h), last = hl.at(-1);
 squiggle(fg, last.l + 8, last.b + 2, Math.min(last.r - last.l - 16, 600 * f), 24 * f, C.green, 20 * f);
-// The sun sits beside the first headline or subline line that leaves room for it (translations differ in length).
-const SR = 58 * f, room = [...hl, ...lineBoxes(st, tt.p)].find((b) => b.r + 90 + SR * 1.9 * 2 <= st.W - 30);
-const sub = lineBoxes(st, tt.p), inSub = !hl.includes(room);
-const sunX = Math.max(1060, (inSub ? Math.max(...sub.map((b) => b.r)) : room.r) + 90 + SR * 1.9);
-const sunY = inSub ? (sub[0].t + sub.at(-1).b) / 2 : (room.t + room.b) / 2;
-sun(fg, sunX, sunY, SR, C.sunOrange, C.sunBrown);
+// The sun sits beside the first headline line, or else beside the subline, where its rays clear every line of text
+// (translations differ in length). RR is the rays' reach including their round caps; line boxes are the font's content
+// area, which already leaves the descender space around the letters, so a 2 px margin is enough. No room: no sun.
+const SR = 58 * f, RR = SR * 2.05, PAD = 2;
+const sub = lineBoxes(st, tt.p), text = [...hl, ...sub];
+const spots = [...hl.map((b) => [Math.max(1060, b.r + 90 + SR * 1.9), (b.t + b.b) / 2]),
+  [Math.max(1060, Math.max(...sub.map((b) => b.r)) + 90 + SR * 1.9), (sub[0].t + sub.at(-1).b) / 2]];
+const away = ([x, y], b) => Math.hypot(Math.max(b.l - x, 0, x - b.r), Math.max(b.t - y, 0, y - b.b));
+const spot = spots.find((p) => p[0] + RR <= st.W - 30 && text.every((b) => away(p, b) >= RR + PAD));
+if (spot) sun(fg, spot[0], spot[1], SR, C.sunOrange, C.sunBrown);
+const sunY = spot ? spot[1] : Infinity;
 if (sunY < py - 760 * f) sparkle(fg, 1120, py - 600 * f, 58 * f, C.white);
 sparkle(fg, 1150, py - 330 * f, 30 * f, C.white);
 sparkle(fg, 110, py - 230 * f, 34 * f, C.white);

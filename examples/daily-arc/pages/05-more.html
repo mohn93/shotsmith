@@ -42,7 +42,7 @@ const labels = TILES.map((k, i) => {
   return label;
 });
 // One label size and width for the whole grid: the largest size at which every label fits in two lines, in a
-// column narrow enough to break most labels in two like the trial's, widened only for a long single word.
+// column narrow enough to break most labels in two, widened only for a long single word.
 const fits = () => labels.every((l) => l.scrollWidth <= l.clientWidth && lineBoxes(st, l).length <= 2);
 fit: for (let size = L.label; size > L.label * 0.7; size -= 1) for (const w of [380, TW - 88]) {
   labels.forEach((l) => { l.style.fontSize = size + "px"; l.style.width = w + "px"; });

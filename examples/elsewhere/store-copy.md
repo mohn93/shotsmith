@@ -22,4 +22,4 @@ Plane jeden Tag Stunde für Stunde auf einer einfachen Zeitleiste und blättere 
 
 Entdecke gute Orte in deiner Nähe auf einer Karte und speichere die Plätze, die du sehen willst.
 
-Sieh deine nächste Reise, ihre Daten und Dauer, sobald du die App öffnest.
+Sieh deine nächste Reise, ihre Reisedaten und Dauer, sobald du die App öffnest.

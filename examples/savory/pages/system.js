@@ -162,7 +162,7 @@ export function warmShadow(st, d, { color = "63,41,36", a = 1 } = {}) {
 // Reshape a kit lift() card: clip it to shapes (capture px; rects with a corner radius, circles) instead of one
 // rounded rectangle, and give it a soft warm drop shadow that follows the shapes. `region` and `inset` are the
 // ones passed to lift(). Used where a card has a plate overhanging it, or where a row of tiles lifts as one.
-export async function shapeLift(st, card, { region, inset = 2, shapes, shadow }) {
+export function shapeLift(st, card, { region, inset = 2, shapes, shadow }) {
   const [x0, y0, x1, y1] = region, w = x1 - x0 - 2 * inset, h = y1 - y0 - 2 * inset, ox = x0 + inset, oy = y0 + inset;
   const sv = shapes.map((sh) => sh.rect
     ? `<rect x="${sh.rect[0] - ox}" y="${sh.rect[1] - oy}" width="${sh.rect[2] - sh.rect[0]}" height="${sh.rect[3] - sh.rect[1]}" rx="${sh.r}" fill="#fff"/>`
