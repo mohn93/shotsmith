@@ -70,7 +70,7 @@ cd screenshots
 | `fonts/` | Open-licence fonts with their license files |
 | `pages/` | One HTML page per screen, plus shared modules |
 | `out/`, `review/` | Renders and review images (generated, not committed) |
-| `export/` | Store-ready JPEGs, contact sheets and `REPORT.md` (committed) |
+| `export/` | Store-ready JPEGs, contact sheets, `REPORT.md` and `upload-*.json` (upload plans and reports) (committed) |
 
 ```json
 {
@@ -169,7 +169,7 @@ Render, view it at 700 px wide and in full-size crops of the details, critique l
 
 `npx shotsmith build` renders every page for every target and locale, writes `export/<locale>/<target>/<page>.jpg` (exact size, opaque, baseline JPEG q92, 4:4:4), contact sheets and `export/REPORT.md`, and runs every check. Do not hand off a set unless it exits 0. Prove it reproduces from a clean tree: `rm -rf node_modules out && npm ci && npx shotsmith build`. Commit the workspace with `export/`, not `out/`, `review/` or `node_modules/`.
 
-Upload only when the user asks. If `npx shotsmith --help` lists an `upload` command, run it without `--apply` first, show the user the plan, and run `--apply` or `--commit` only after they confirm. Otherwise hand over `export/` with the upload notes in `targets.md`. Never submit an app for review.
+Upload only when the user asks, and only from a set whose `build` exits 0. Run `npx shotsmith upload apple` or `npx shotsmith upload play` without flags first: it changes nothing, prints what it would keep, delete and upload and the final order, and writes `export/upload-plan-<store>.json`. Show the user that plan. Run `--apply` only after they confirm it. For Google Play, `--apply` stages a validated draft edit and prints its id, and `--commit <editId>` publishes it, again only after the user confirms. A request to upload is not confirmation of the plan: show the plan and wait for an explicit yes. If credentials are missing, tell the user which environment variables or `credentials.json` fields to set; never ask for keys in chat. After a failed `--apply`, show the user the printed summary and plan again before anything else. Never submit an app for review, and never put store keys in the workspace (credentials and details: `targets.md`).
 
 ## Common mistakes
 
