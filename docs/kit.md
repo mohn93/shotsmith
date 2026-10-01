@@ -64,7 +64,7 @@ Two more rules the checks enforce:
 const r = await headline(el, "opener.headline", { maxSize: 110, minSize: 66, maxLines: 2, lineHeight: 1.08 });
 ```
 
-Fills `el` with the claim, marks it as a claim element, and picks the largest font size from `maxSize` down to `minSize` (default 60% of `maxSize`, 0.5 px steps) where the text fits in at most `maxLines` (default 2) lines and no word overflows the box. Give `el` a width first; `headline` sets `font-size` and `line-height` only.
+Fills `el` with the claim, marks it as a claim element, and picks the largest font size from `maxSize` down to `minSize` (default 60% of `maxSize`, 0.5 px steps) where the text fits in at most `maxLines` (default 2) lines and no word overflows the box. Give `el` a width and add it to the page first: it is measured where it stands, and `headline` throws for an element that is not in the page. `headline` sets `font-size` and `line-height` only.
 
 Returns `{ size, lines, shrink, bottom, overflow }`:
 
@@ -127,12 +127,18 @@ Loads a capture as a decoded `<img>` for page art outside a device frame: rows c
 ## lift
 
 ```js
-lift(d, { region: [90, 600, 1080, 900] });
+const card = lift(d, { region: [90, 600, 1080, 900] });
 ```
 
-Lifts one row of a capture (a card, a notification) out of the device as a floating card. `region` is `[x0, y0, x1, y1]` in capture pixels.
+Lifts one row of a capture (a card, a notification) out of the device as a floating card. `region` is `[x0, y0, x1, y1]` in capture pixels. It returns the card, a `<div>` holding the cropped row. Setting `card.style.transform` (a small rotation, a `translateZ` on a tilted device) is fine; on a tilted device it replaces the kit's own `translateZ(2px)`, so keep a `translateZ` in it. Leave the card's size and position to the kit.
 
-Measure it: open the capture in an image viewer and read the row's pixel bounds; the region should sit just inside the card's outer edge. Measure `radius` the same way, as the card's corner radius in capture pixels. It defaults to `min(28, height / 2)`, which is rarely exactly right, and a wrong radius shows as a sliver of the source corner.
+Measure the region from the capture's pixels, never by eye. This prints the colour runs along one row (`row <y>`) or column (`col <x>`) of a capture, using the `sharp` that comes with shotsmith. Run it in the workspace:
+
+```sh
+node -e 'const [f,a,n]=process.argv.slice(1),sharp=require(require.resolve("sharp",{paths:[require.resolve("shotsmith/package.json")]}));sharp(f).removeAlpha().raw().toBuffer({resolveWithObject:true}).then(({data,info})=>{const len=a==="row"?info.width:info.height,at=(i)=>3*(a==="row"?+n*info.width+i:i*info.width+ +n);let s=0;for(let i=1;i<=len;i++)if(i===len||[0,1,2].some((c)=>Math.abs(data[at(i)+c]-data[at(s)+c])>24)){console.log(`${s}-${i-1} rgb(${[...data.subarray(at(s),at(s)+3)]})`);s=i}})' inputs/iphone/en/home.png row 950
+```
+
+Scan a row through the middle of the card for `x0` and `x1` (where the card's colour starts and ends) and a column through it for `y0` and `y1`; the region should sit just inside the card's outer edge. For `radius` (the card's corner radius in capture pixels), scan the card's first row (`y0`): the curve makes its colour start at about `x0 + radius - sqrt(radius)`, so a start 55 px right of `x0` means a radius near 63. The default, `min(28, height / 2)`, is rarely exactly right, and a radius that is too small shows as a sliver of the source corner. To look at a spot, crop it at full size with the same `sharp` (`sharp(f).extract({ left, top, width, height }).toFile("crop.png")`) and view the crop; its pixel (0, 0) is capture pixel (left, top).
 
 | Option | Meaning |
 | --- | --- |
@@ -165,7 +171,9 @@ renderer.render(scene, pagePerspective());
 await ready();
 ```
 
-Needs `three` (0.160 or newer) in the workspace's `node_modules` (`npm install three`); `init` adds it to `package.json`. World units are logical stage px with `at(x, y, z)` mapping stage coordinates (y down) into the scene. `phone3d` builds a phone with the capture as its screen and supports phone targets only (`iphone`, `android-phone`). Render once before `ready()`; the renderer keeps its drawing buffer so the screenshot shows it. The capture rules above apply to `phone3d` too.
+`createRenderer({ supersample, z })` adds a full-stage transparent WebGL canvas to `s.root` and returns the `THREE.WebGLRenderer`. `supersample` (default 1) multiplies the pixel ratio for smoother edges at the cost of memory; `z` is the canvas's z-index (default 5), so HTML can sit above or below the 3D layer.
+
+Needs `three` (0.160 or newer) in the workspace's `node_modules` (`npm install three`); `init` adds it to `package.json`. Pages import `three` and `three/addons/...` (for example `three/addons/geometries/RoundedBoxGeometry.js`) by those names: the renderer maps them to the workspace's `node_modules/three` with an import map. World units are logical stage px with `at(x, y, z)` mapping stage coordinates (y down) into the scene. `phone3d` builds a phone with the capture as its screen and supports phone targets only (`iphone`, `android-phone`). Render once before `ready()`; the renderer keeps its drawing buffer so the screenshot shows it. The capture rules above apply to `phone3d` too.
 
 ## ready
 

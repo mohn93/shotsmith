@@ -9,7 +9,8 @@
 | `ipad-13` | 2064x2752 | App Store `APP_IPAD_PRO_3GEN_129` | 4:3: needs its own art direction (`s.pick` key `t43`) |
 | `android-phone` | 1080x1920 | Play `phoneScreenshots` | 9:16 (`p916`). Play rejects aspect ratios above 2:1, so iPhone art cannot be reused; re-lay out |
 | `android-tablet` | 1440x2560 | Play `sevenInchScreenshots` and `tenInchScreenshots` | One set serves both slots (`t916`) |
-| App Preview video | 886x1920 | App Store preview | 30 fps, H.264, through `npx shotsmith render <page> --video` |
+
+App Preview export is not supported in this version; `npx shotsmith render <page> -t <target> --video` records a draft at a screenshot target's size for motion review.
 
 A custom target is `{ "name", "w", "h", "platform" }` in `targets`; Apple targets must use a size App Store Connect accepts. Limits: App Store up to 10 per set; Play up to 8 per slot, 320 to 3840 px per side. Keep one story order across all targets.
 
@@ -32,7 +33,7 @@ A custom target is `{ "name", "w", "h", "platform" }` in `targets`; Apple target
 - Google Play images: Inter (OFL) or Roboto (Apache). For monospace on Android use an OFL font such as JetBrains Mono. Shotsmith refuses Apple-only fonts on Play targets from any source, including a page's own `@font-face` and system fallbacks.
 - Give every role a `fallback` that is not Apple-only. On a machine without SF (Linux) Shotsmith uses it and warns (`font.fallback`).
 - Open-licence fonts live in `fonts/` with their license file. Sources: the `google/fonts` GitHub repo (font files plus `OFL.txt` per family) or `@fontsource/<family>` npm packages (woff2 plus license). For a serif look, pick an OFL serif (Lora, Fraunces, Source Serif); New York has the same Apple-only terms as SF.
-- Inter runs wider than SF: recheck wraps after switching. A string the font does not cover fails (`text.coverage`), so pick fonts that cover every locale's script, or set per-locale fonts (`locales[].fonts`).
+- Inter runs wider than SF: recheck wraps after switching. A string the font does not cover fails (`text.coverage`), so pick fonts that cover every locale's script, or set a per-locale font: `locales[].fonts.<role>` is one source (a file, `sysfont:` or a weights map) that replaces the role for that locale on every store, for example `"fonts": { "text": "fonts/NotoSansArabic-Regular.ttf" }` on the `ar` locale.
 
 ## Uploading (only when the user asks)
 

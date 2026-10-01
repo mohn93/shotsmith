@@ -9,22 +9,22 @@ description: Use when creating App Store or Google Play screenshot sets, App Pre
 
 Write each screenshot as a web page (Three.js, GLSL, SVG/Canvas2D, GSAP, HTML/CSS type) and let Shotsmith do the rule-bound parts: rendering in headless Chromium, device frames and status bars, headline fit, lifted cards, fonts per store, store-ready exports, and the checks for store rules, text fit and claims. Art-direct your own renders until they hold up next to top listings. The user's taste drives the direction; the styles in `styles.md` are starting points, not the only options.
 
-This skill targets Shotsmith 0.1.0. Before a workspace exists run `npx shotsmith@0.1.0 <command>`; inside a workspace run `npx shotsmith <command>`, which uses the version the workspace pins. Every command takes `--json` and exits 0 (no errors), 1 (error findings) or 2 (usage or runtime failure).
+This skill targets Shotsmith 0.1.0. Before a workspace exists run `npx shotsmith@0.1.0 <command>`; inside a workspace run `npx shotsmith <command>`, which uses the version installed there. Every command takes `--json` and exits 0 (no errors), 1 (error findings) or 2 (usage or runtime failure).
 
 ## 1. Get the user's taste
 
 **If the user already described a look** (mood, colors, type, textures, apps they like, things to avoid), do not ask them to pick a style: their words become the direction brief in step 3.
 
-**Otherwise** ask in one AskUserQuestion call (one chat message where that tool does not exist). First question: "Describe the feel you want: mood, apps whose screenshots you like, colors, typography, anything to avoid. Or start from one of these directions." Options: the five styles in `styles.md` (Cinematic first), with the user's free text arriving through "Other". Before asking, show the matching style previews (`previews/cinematic.jpg`, `previews/three-studio.jpg`, `previews/glsl-shader.jpg`, `previews/svg-gsap.jpg`, `previews/panorama.jpg`, made for DNS Kit) and the complete example sets (`previews/savory.jpg`, `previews/elsewhere.jpg`, `previews/daily-arc.jpg`, fictional apps). Send them with SendUserFile or attach them, and say they are examples made for other apps, not templates.
+**Otherwise** ask in one AskUserQuestion call (one chat message where that tool does not exist). The tool holds at most four questions of two to four options each and adds "Other" for free text, so keep to these:
 
-In the same call, ask whatever else is missing:
+- **Feel:** "Describe the feel you want: mood, apps whose screenshots you like, colors, typography, anything to avoid. Or start from one of these directions." Options: up to four styles from `styles.md` that fit the app, Cinematic first; the user's own description arrives through "Other".
+- **Targets** (multi-select): iPhone, iPad, Android phone, Android tablet. iPhone means 6.9; add 6.5 only when the user asks. Sizes: `targets.md`.
+- **Locales:** for example "English only" and "Every language the listing has"; a list arrives through "Other".
+- **Source of truth:** where the current captures (per platform and locale) and the verified store copy live; for example "I will attach them" and "In this repository", with a path through "Other".
 
-- **Targets** (multi): iPhone 6.9, iPhone 6.5, iPad 13, Android phone, Android tablet, App Preview video. Sizes: `targets.md`.
-- **Locales:** which store languages to ship.
-- **Source of truth:** where the current captures (per platform and locale) and the verified store copy live.
-- **Extras:** number of screens, story order, brand colors or fonts.
+Before asking, show the matching style previews (`previews/cinematic.jpg`, `previews/three-studio.jpg`, `previews/glsl-shader.jpg`, `previews/svg-gsap.jpg`, `previews/panorama.jpg`, made for DNS Kit) and the complete example sets (`previews/savory.jpg`, `previews/elsewhere.jpg`, `previews/daily-arc.jpg`, fictional apps). Send them with SendUserFile or attach them, and say they are examples made for other apps, not templates.
 
-Skip a question only when the user already answered it.
+Skip a question only when the user already answered it. Ask about the number of screens, story order and brand colors or fonts in the brief (step 3), unless the user already said.
 
 ## 2. Collect the truth
 
@@ -59,7 +59,7 @@ npx shotsmith@0.1.0 init screenshots --app "Savory"
 cd screenshots
 ```
 
-`init` writes the workspace, installs its dependencies (it pins shotsmith 0.1.0 and three), and adds a sample page and a placeholder capture that `check` refuses until it is replaced.
+`init` writes the workspace, installs its dependencies, and adds a sample page and a placeholder capture that `check` refuses until it is replaced. Its `package.json` lists `"shotsmith": "^0.1.0"` (the newest 0.1.x at install time, then held by `package-lock.json`) and `three`.
 
 | Path | Holds |
 | --- | --- |
@@ -99,7 +99,8 @@ cd screenshots
 }
 ```
 
-- Fonts: SF Pro and New York only through `sysfont:` and only for App Store targets; Shotsmith refuses them for Google Play and never copies them. Give every role a `play` font and a `fallback` for machines without SF (Linux). A role can also name weights: `{ "400": "fonts/Inter-Regular.ttf", "700": "fonts/Inter-Bold.ttf" }`.
+- Fonts: SF Pro and New York only through `sysfont:` and only for App Store targets; Shotsmith refuses them for Google Play and never copies them. Give every role a `play` font and a `fallback` for machines without SF (Linux). Each source (`apple`, `play`, `fallback`) can be one file or a weights map: `"play": { "400": "fonts/Inter-Regular.ttf", "700": "fonts/Inter-Bold.ttf" }`.
+- Per-locale fonts: `locales[].fonts.<role>` is one source (a file, `sysfont:` or a weights map) that replaces that role for that locale on every store, for example an Arabic face: `{ "code": "ar", "dir": "rtl", "fonts": { "text": "fonts/NotoSansArabic-Regular.ttf" } }`. If it names a missing `sysfont:`, the role's global `fallback` is used, so prefer a bundled file that covers the script.
 - After adding a package (`gsap`, `@fontsource/<family>`), run `npm install` and keep `package-lock.json`.
 
 Read `kit.md` before writing pages: it is the full reference for the kit and for what the checks cannot see. A page in short:
@@ -145,17 +146,18 @@ Pick the tech per element of the approved brief. Quiet directions still get craf
 
 ```sh
 npx shotsmith render 01-opener -t iphone-6.9 -l en    # out/en/iphone-6.9/01-opener.png
+npx shotsmith claims                                  # untraced words and claim mismatches in the renders so far
 npx shotsmith build -t iphone-6.9 -l en               # every page for one target and locale, with the checks
 npx shotsmith thumbs iphone-6.9 --width 700           # review/en-iphone-6.9-700.png: per-screen critique
 npx shotsmith thumbs iphone-6.9 --width 300           # the whole set at listing size
-npx shotsmith strip iphone-6.9                        # panoramas: joins the screens, checks every seam
+npx shotsmith strip iphone-6.9 -l en                  # panoramas: joins the screens, checks every seam; once per target and locale
 ```
 
 Render, view it at 700 px wide and in full-size crops of the details, critique like a harsh art director, fix. At least 3 rounds per screen, then review the whole set at 300. Fix every finding `build` reports. The checks catch text overflow, clipping, text in the top or bottom 4%, missing glyphs, fonts not allowed on a store, untraced text and wrong captures; they do not look at the pixels, so look yourself. Every screen passes when:
 
 - each graphic reads at a glance as what it stands for: ask what a stranger would call it at 300 px (a progress arc that looks like loose blobs fails);
 - no UI row appears twice: a lifted card covers exactly the region it came from, or leaves an empty recess on a tilted phone; check at full size;
-- no card covers capture text it does not replace; lift regions and radii are measured from the capture's pixels; no UI is half cut at a crop edge;
+- no card covers capture text it does not replace; lift regions and radii are measured from the capture's pixels (method in `kit.md`, lift); no UI is half cut at a crop edge;
 - text is legible at thumbnail size; large text has at least 3:1 contrast, small text 4.5:1;
 - no blown whites, banding, aliasing, invisible or hard-edged shadows; texture and grain stay off the phone screens;
 - across the set, headlines start at the same height and inner headlines share a size; neighbouring screens differ in layout and hue;

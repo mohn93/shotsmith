@@ -7,7 +7,7 @@ Five tested presets, plus "match a listing" and custom directions built from the
 | Cinematic (recommended default) | Technical, utility, data, travel, finance apps | Dark, atmospheric, premium | Three.js scenes + GLSL fields + SVG icons + HTML type |
 | Three.js studio | Hardware-feel, pro tools, anything that benefits from real 3D devices | Photoreal product shots | Three.js PBR |
 | GLSL shader art | Developer tools, AI, audio, security | Dark, luminous, abstract | GLSL fragment shaders + Canvas2D |
-| SVG editorial + motion | Consumer, productivity, education, fintech | Bright, flat, bold | SVG/Canvas2D + GSAP (+ App Preview video) |
+| SVG editorial + motion | Consumer, productivity, education, fintech | Bright, flat, bold | SVG/Canvas2D + GSAP (+ motion draft) |
 | Panorama | Any app whose story reads as one journey | Continuous strip across screens | Mixed: one Three.js/GLSL scene sliced into screens |
 
 ## Cinematic (Flighty-style)
@@ -45,7 +45,7 @@ The strongest result so far, and the one that shipped (`previews/cinematic.jpg`)
 ## SVG editorial + GSAP motion
 
 - One bold flat color block per screen (e.g. blue, yellow, green), big left-aligned headline, vector device frame, cards popped out of the capture with status badges, oversized numerals, a dotted world map sampled from map pixels.
-- Build every screen as a paused GSAP timeline; the still is the last frame, and the same timeline renders the App Preview video (886x1920, 30 fps) through `window.__seek`. Video costs about 30% more effort and is worth it.
+- Build every screen as a paused GSAP timeline; the still is the last frame, and the same timeline records a motion draft through `window.__seek` (`npx shotsmith render <page> -t <target> --video`, at the screenshot target's size). App Preview export is not supported in this version, so the draft is for reviewing motion only.
 - **Known failures:** every screen fell into headline + phone + pop-out card; a weak illustration (an "@" glyph) looked like clip art, so drop art that doesn't land; the overlay font differed from the capture's font during the counter animation; thousands of SVG nodes made frames take 4.8 s (canvas dots brought it to 0.45 s).
 - **Reference:** `reference/svg-gsap/lib.js` (frame, card lifting, ring arcs), `scenes.js`, `preview.html` (video timeline), `mapdata.py` (map sampling). Video frames: `previews/svg-gsap-video-frames.jpg`.
 - **Example:** `reference/examples/daily-arc` (flat color blocks, phone-less card stacks, no motion).
