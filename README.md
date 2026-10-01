@@ -12,6 +12,17 @@ npm ci && npm run build && npm link
 npx playwright install chromium
 ```
 
+Then create a workspace with the linked command and install shotsmith into it from the checkout. `init`'s own install would fetch `shotsmith@^0.1.0` from npm, which does not exist yet, so skip it:
+
+```sh
+shotsmith init screenshots --app "My App" --no-install
+cd screenshots
+npm install /path/to/shotsmith    # the checkout; also installs three
+npx shotsmith build
+```
+
+Until the package is published, use `shotsmith init` (and `shotsmith <command>` in general) where the skill says `npx shotsmith@0.1.0 init`, and install the checkout as above. Inside the workspace, `npx shotsmith` works as the skill describes.
+
 The agent skill (`skills/store-screenshots`) drives the whole flow: taste, claims, brief, pages, review, build.
 
 - Claude Code: `/plugin marketplace add mohn93/shotsmith`, then `/plugin install shotsmith@shotsmith`.
