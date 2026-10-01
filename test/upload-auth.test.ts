@@ -12,13 +12,14 @@ describe("fetchTransport", () => {
     const server = http.createServer((req, res) => {
       let body = "";
       req.on("data", (c) => (body += c));
-      req.on("end", () => { res.writeHead(201); res.end(JSON.stringify({ method: req.method, auth: req.headers.authorization, body })); });
+      req.on("end", () => { res.writeHead(201, { "Retry-After": "7" }); res.end(JSON.stringify({ method: req.method, auth: req.headers.authorization, body })); });
     });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     try {
       const { port } = server.address() as AddressInfo;
       const r = await fetchTransport()({ method: "PATCH", url: `http://127.0.0.1:${port}/x`, headers: { Authorization: "Bearer t" }, body: "hi" });
       expect(r.status).toBe(201);
+      expect(r.headers?.["retry-after"]).toBe("7");
       expect(JSON.parse(r.text)).toEqual({ method: "PATCH", auth: "Bearer t", body: "hi" });
     } finally {
       server.close();

@@ -3,7 +3,7 @@ import { loadConfig } from "../../config/schema.js";
 import type { AppleDeps } from "../../upload/apple.js";
 import { appleToken, playTokenSource } from "../../upload/auth.js";
 import { appleCredentials, playCredentials, playKey, readKey } from "../../upload/credentials.js";
-import { fetchTransport } from "../../upload/http.js";
+import { fetchTransport, retrying } from "../../upload/http.js";
 import type { PlayDeps } from "../../upload/play.js";
 import { type UploadOutcome, runApple, runPlay } from "../../upload/run.js";
 import { globals } from "../output.js";
@@ -16,13 +16,13 @@ function appleDeps(root: string, json?: boolean): AppleDeps {
   const creds = appleCredentials();
   const key = readKey(creds.keyPath, root);
   try { appleToken(creds, key); } catch { throw new Error(`${creds.keyPath} is not an App Store Connect private key (.p8)`); }
-  return { transport: fetchTransport(), token: () => appleToken(creds, key), log: logger(json) };
+  return { transport: retrying(fetchTransport()), token: () => appleToken(creds, key), log: logger(json) };
 }
 
 function playDeps(root: string, json?: boolean): PlayDeps {
   const creds = playCredentials();
   const key = playKey(readKey(creds.keyPath, root), creds.keyPath);
-  const transport = fetchTransport();
+  const transport = retrying(fetchTransport());
   return { transport, token: playTokenSource(key, transport), log: logger(json) };
 }
 

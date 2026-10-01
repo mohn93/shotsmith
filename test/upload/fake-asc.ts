@@ -56,7 +56,10 @@ export class FakeAsc {
     const url = new URL(req.url);
     this.calls.push(`${req.method} ${url.pathname}`);
     if (/submission/i.test(url.pathname)) throw new Error(`the uploader must never submit for review (${req.method} ${url.pathname})`);
-    if (url.origin === this.uploadHost && req.method === "PUT") return this.part(url, req);
+    if (url.origin === this.uploadHost && req.method === "PUT") {
+      if (req.headers?.Authorization) throw new Error(`the API token must not go to an upload host (${req.method} ${url.pathname})`);
+      return this.part(url, req);
+    }
     if (url.origin !== API) return fail(404, `unknown host ${url.origin}`);
     if (this.status401 || !req.headers?.Authorization?.startsWith("Bearer ")) return fail(401, "Authentication credentials are missing or invalid.");
     return this.api(req.method, url, typeof req.body === "string" ? JSON.parse(req.body) : undefined);
@@ -87,7 +90,8 @@ export class FakeAsc {
     }
     if (method === "GET" && (m = p.match(/^\/v1\/appScreenshotSets\/([^/]+)\/appScreenshots$/))) {
       const set = this.sets.find((s) => s.id === m![1]);
-      return set ? this.list(url, set.shots.map((id) => this.shotJson(this.shots.get(id)!))) : fail(404, "no such set");
+      if (!set) return fail(404, "no such set");
+      return this.list(url, set.shots.map((id) => { const shot = this.shots.get(id)!; this.advance(shot); return this.shotJson(shot); }));
     }
     if (method === "PATCH" && (m = p.match(/^\/v1\/appScreenshotSets\/([^/]+)\/relationships\/appScreenshots$/))) {
       const set = this.sets.find((s) => s.id === m![1]);
@@ -108,10 +112,7 @@ export class FakeAsc {
       const shot = this.shots.get(m[1]);
       if (!shot) return fail(404, "no such screenshot");
       if (method === "GET") {
-        if (shot.state === "UPLOAD_COMPLETE") {
-          if (shot.polls <= 0) shot.state = this.failProcessing ? "FAILED" : "COMPLETE";
-          else shot.polls--;
-        }
+        this.advance(shot);
         return reply(200, { data: this.shotJson(shot) });
       }
       if (method === "PATCH") {
@@ -130,6 +131,13 @@ export class FakeAsc {
       }
     }
     return fail(404, `no route ${method} ${p}`);
+  }
+
+  // Each GET that shows a screenshot moves its processing one step on.
+  private advance(shot: Shot): void {
+    if (shot.state !== "UPLOAD_COMPLETE") return;
+    if (shot.polls <= 0) shot.state = this.failProcessing ? "FAILED" : "COMPLETE";
+    else shot.polls--;
   }
 
   private part(url: URL, req: HttpRequest): HttpResponse {
