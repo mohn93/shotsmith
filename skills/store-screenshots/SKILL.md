@@ -1,6 +1,6 @@
 ---
 name: store-screenshots
-description: Use when creating App Store or Google Play screenshot sets, App Preview videos, or store device frames for any app, especially when the user describes a look or mood, names apps whose screenshots they like, or wants premium, flashy, 3D, cinematic or panoramic screenshots rather than a template or editor output.
+description: Use when creating App Store or Google Play screenshot sets or store device frames for any app, especially when the user describes a look or mood, names apps whose screenshots they like, or wants premium, flashy, 3D, cinematic or panoramic screenshots rather than a template or editor output.
 ---
 
 # Store screenshots with Shotsmith
