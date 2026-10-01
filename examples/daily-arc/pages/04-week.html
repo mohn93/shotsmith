@@ -19,11 +19,16 @@ const tt = await title(st, "week.headline", { y: L.y, size: L.size, color: C.whi
 const row = box(st.root, `left:80px;top:${tt.bottom + L.numGap}px;z-index:30;display:flex;align-items:center;gap:36px;color:${C.white}`);
 const num = t.el("div", "week.rate", row);
 num.style.cssText = `font:700 ${L.num}px/1 var(--font-display);letter-spacing:-0.02em;word-spacing:-0.18em;white-space:nowrap;text-shadow:0 ${L.num * 0.055}px 0 ${SHADE}`;
-const side = box(row, "position:relative;display:flex;flex-direction:column;gap:10px");
+const side = box(row, "position:relative;flex:none;display:flex;flex-direction:column;gap:10px");
 const period = t.el("div", "week.period", side);
-period.style.cssText = `font:900 ${L.num * 0.1}px/1 var(--font-text);letter-spacing:0.12em;color:#D6E4FD`;
+period.style.cssText = `font:900 ${L.num * 0.17}px/1 var(--font-text);letter-spacing:0.03em;white-space:nowrap`;
 const label = t.el("div", "week.rateLabel", side);
 label.style.cssText = `font:900 ${L.num * 0.17}px/1.1 var(--font-text)`;
+// When a translation runs long, scale the whole numeral row down until the side label ends inside the margin.
+for (let m = 1; lineBoxes(st, period)[0].r > st.W - 70 && m > 0.75; m -= 0.01) {
+  num.style.fontSize = L.num * m + "px";
+  period.style.fontSize = label.style.fontSize = L.num * m * 0.17 + "px";
+}
 
 // streak chip, the insights capture's streak line; anchored to the bottom
 const flame = `<span style="flex:none;display:inline-block;width:${L.chipH * 0.75}px;height:${L.chipH * 0.75}px;margin-left:-10px">${ICONS.flame("#F2552C", "#FFE08A")}</span>`;
