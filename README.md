@@ -43,7 +43,7 @@ The agent skill (`skills/store-screenshots`) drives the whole flow: taste, claim
 | `shotsmith claims` | Every visible word comes from `claims.json` with a source |
 | `shotsmith thumbs <target> [--width 300]` | Review row |
 | `shotsmith strip <target>` | Panorama join and seam check |
-| `shotsmith upload apple\|play` | Plan, or with `--apply` / `--commit` make, store screenshot changes (see Uploading) |
+| `shotsmith upload apple` and `shotsmith upload play` | Plan, or with `--apply` / `--commit` make, store screenshot changes (see Uploading) |
 | `shotsmith skill path` / `skill install [--dir d] [--force]` | Print the bundled agent skill's folder, or copy it to `~/.claude/skills` |
 
 All commands take `-C <dir>` and `--json`. Requires Node 20+ and `npx playwright install chromium`.
@@ -62,7 +62,9 @@ Pages are plain HTML that import `shotsmith/kit` (and optionally `shotsmith/kit/
 | `shotsmith upload apple --apply` | Make them: delete superseded screenshots, upload, wait for processing, order, and read back into `export/upload-report-apple.json`. Never submits for review |
 | `shotsmith upload play [-l ...]` | Plan the changes per listing language and slot |
 | `shotsmith upload play --apply` | Stage them in a validated draft edit, print its id and write `export/upload-report-play.json`; nothing is live |
-| `shotsmith upload play --commit <editId>` | Publish the staged edit |
+| `shotsmith upload play --commit <editId>` | Publish the staged edit; it must be the one the last `--apply` staged |
+
+`--commit` refuses when `export/upload-report-play.json` names a different edit, names no edit, or cannot be read; delete the report to commit an edit staged elsewhere. For an app whose changes Google will not send for review automatically, use `shotsmith upload play --commit <editId> --changes-not-sent-for-review` (only with `--commit`) and send the changes for review in Play Console afterwards. A Play `--apply` with nothing to change keeps no edit. Processing waits up to 5 minutes per set.
 
 `--apply` refuses when the exports or the store changed since the saved plan; plan again, and repeat the same `-l` and `--app-version` on `--apply`. A failed `--apply` writes its report and exits 2. On Google Play the draft edit is discarded, so the listing is unchanged; on App Store Connect the version may be left incomplete, so plan and apply again before submitting. Credentials come from the environment or `~/.config/shotsmith/credentials.json`, never from the workspace, and a key file inside a git working tree is refused:
 
@@ -79,4 +81,4 @@ Pages are plain HTML that import `shotsmith/kit` (and optionally `shotsmith/kit/
 | 1 | Error findings (for `strip`, a seam that steps; for `upload`, problems in the plan) |
 | 2 | Usage or runtime failure: bad arguments, missing config, a crash, a failed or refused upload |
 
-With `--json` every command prints exactly one JSON object to stdout and nothing else. It always has a boolean `ok`: `ok` is `true` for exit code 0 and `false` otherwise. Commands that check (`check`, `claims`, `build`) add `errors` and `warnings` arrays of `{ rule, severity, message, locale?, target?, page? }`. A runtime failure prints `{ "ok": false, "error": { "message": "..." } }` and exits 2. `upload` adds `plan` and `planFile`, `report` and `reportFile`, or `committed`; a failed upload apply carries `error` plus `report` and `reportFile`.
+With `--json` every command prints exactly one JSON object to stdout and nothing else. It always has a boolean `ok`: `ok` is `true` for exit code 0 and `false` otherwise. Commands that check (`check`, `claims`, `build`) add `errors` and `warnings` arrays of `{ rule, severity, message, locale?, target?, page? }`. A runtime failure prints `{ "ok": false, "error": { "message": "..." } }` and exits 2. `upload` adds `plan` and `planFile`, `report` and `reportFile`, or `committed`; under `--apply` with export problems there is a `plan` but no `planFile`, because the saved plan is kept; a failed upload apply carries `error` plus `report` and `reportFile`.
