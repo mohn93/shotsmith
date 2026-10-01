@@ -163,6 +163,20 @@ describe("runPlay", () => {
     await expect(runPlay(cfg, { commit: "1002" }, play(fake))).resolves.toMatchObject({ ok: true, json: { committed: "1002" } });
   });
 
+  it("refuses --commit before connecting when the last apply staged nothing or left a bad report", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakePlay();
+    await runPlay(cfg, {}, play(fake));
+    await runPlay(cfg, { apply: true }, play(fake));
+    await runPlay(cfg, { commit: "1002" }, play(fake));
+    await runPlay(cfg, {}, play(fake));
+    await runPlay(cfg, { apply: true }, play(fake));
+    expect(JSON.parse(fs.readFileSync(reportPath(cfg, "play"), "utf8")).editId).toBeNull();
+    await expect(runPlay(cfg, { commit: "1002" }, never)).rejects.toThrow(/staged no edit.*delete export\/upload-report-play\.json first/);
+    fs.writeFileSync(reportPath(cfg, "play"), "garbage");
+    await expect(runPlay(cfg, { commit: "1002" }, never)).rejects.toThrow(/is not a Shotsmith upload report; delete it before committing edit 1002/);
+  });
+
   it("passes --changes-not-sent-for-review to the commit, and only with --commit", async () => {
     const cfg = await uploadWorkspace({ export: false });
     const fake = new FakePlay();

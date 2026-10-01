@@ -104,13 +104,15 @@ export function readPlan(cfg: ResolvedConfig, store: Store): UploadPlan | null {
   }
 }
 
-// The report of the last apply, or null when there is none or it cannot be read.
-export function readReport(cfg: ResolvedConfig, store: Store): UploadReport | null {
+// The report of the last apply; null when there is none, "unreadable" when the file is not a report.
+export function readReport(cfg: ResolvedConfig, store: Store): UploadReport | "unreadable" | null {
+  const file = reportPath(cfg, store);
+  if (!lstatOrNull(file)) return null;
   try {
-    const r = JSON.parse(fs.readFileSync(reportPath(cfg, store), "utf8"));
-    return r && r.store === store && (r.editId === null || typeof r.editId === "string") ? r : null;
+    const r = JSON.parse(fs.readFileSync(file, "utf8"));
+    return r && r.store === store && (r.editId === null || typeof r.editId === "string") ? r : "unreadable";
   } catch {
-    return null;
+    return "unreadable";
   }
 }
 

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { type LocalSet, localSets } from "../src/upload/local.js";
 import { reportPath, writeJson } from "../src/upload/plan.js";
@@ -150,11 +151,29 @@ describe("commitPlay", () => {
     await expect(commitPlay(cfg, "1002", {}, deps(fake))).resolves.toMatchObject({ editId: "1002" });
   });
 
-  it("allows any edit when there is no report, or the report names no edit", async () => {
+  it("allows an edit when there is no report", async () => {
     const { cfg, sets, fake, plan } = await planned();
     const report = await applyPlay(cfg, sets, plan, deps(fake));
     await expect(commitPlay(cfg, report.editId!, {}, deps(fake))).resolves.toMatchObject({ editId: "1002" });
+  });
+
+  it("refuses when the last apply staged no edit, without calling Google", async () => {
+    const { cfg, fake } = await planned();
     wroteReport(cfg, null);
+    fake.calls = [];
+    await expect(commitPlay(cfg, "1001", {}, deps(fake))).rejects.toThrow(
+      "The last shotsmith upload play --apply (export/upload-report-play.json) staged no edit, so there is nothing from it to commit. If you mean to commit edit 1001 from elsewhere, delete export/upload-report-play.json first.");
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("refuses a report that is not a report, and commits once it is deleted", async () => {
+    const { cfg, fake } = await planned();
+    for (const text of ["not json", "{}", JSON.stringify({ store: "play", editId: 7 }), "null"]) {
+      fs.writeFileSync(reportPath(cfg, "play"), text);
+      await expect(commitPlay(cfg, "1001", {}, deps(fake))).rejects.toThrow("export/upload-report-play.json is not a Shotsmith upload report; delete it before committing edit 1001.");
+    }
+    expect(fake.calls).toEqual(expect.not.arrayContaining([expect.stringContaining(":commit")]));
+    fs.rmSync(reportPath(cfg, "play"));
     await expect(commitPlay(cfg, "1001", {}, deps(fake))).rejects.toThrow(/no longer has edit 1001/);
   });
 

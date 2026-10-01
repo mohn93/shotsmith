@@ -193,12 +193,17 @@ async function applyPlaySet(c: PlayClient, edit: string, { plan: p, local }: Pla
   }
 }
 
-// The edit id must be a Play edit id and, when the last apply left a report, the edit that report names.
+// The edit id must be a Play edit id and, when the last apply left a report, the edit that report names. A report that
+// names no edit, or is not a report, refuses too. No report at all allows it, for an edit staged elsewhere.
 export function checkCommit(cfg: ResolvedConfig, editId: string): void {
   checkEditId(editId);
-  const staged = readReport(cfg, "play")?.editId;
-  if (staged && staged !== editId) {
-    throw new Error(`The last --apply staged edit ${staged}, not ${editId}. Commit ${staged}, or delete ${rel(cfg, reportPath(cfg, "play"))} first to commit a different edit`);
+  const report = readReport(cfg, "play");
+  if (report === null) return;
+  const file = rel(cfg, reportPath(cfg, "play"));
+  if (report === "unreadable") throw new Error(`${file} is not a Shotsmith upload report; delete it before committing edit ${editId}.`);
+  if (!report.editId) throw new Error(`The last shotsmith upload play --apply (${file}) staged no edit, so there is nothing from it to commit. If you mean to commit edit ${editId} from elsewhere, delete ${file} first.`);
+  if (report.editId !== editId) {
+    throw new Error(`The last --apply staged edit ${report.editId}, not ${editId}. Commit ${report.editId}, or delete ${file} first to commit a different edit`);
   }
 }
 
