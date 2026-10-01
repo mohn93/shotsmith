@@ -61,7 +61,7 @@ Pages are plain HTML that import `shotsmith/kit` (and optionally `shotsmith/kit/
 | `shotsmith upload apple [--app-version v] [-l ...]` | Plan the screenshot changes for the editable App Store version |
 | `shotsmith upload apple --apply` | Make them: delete superseded screenshots, upload, wait for processing, order, and read back into `export/upload-report-apple.json`. Never submits for review |
 | `shotsmith upload play [-l ...]` | Plan the changes per listing language and slot |
-| `shotsmith upload play --apply` | Stage them in a validated draft edit and print its id; nothing is live |
+| `shotsmith upload play --apply` | Stage them in a validated draft edit, print its id and write `export/upload-report-play.json`; nothing is live |
 | `shotsmith upload play --commit <editId>` | Publish the staged edit |
 
 `--apply` refuses when the exports or the store changed since the saved plan; plan again. Credentials come from the environment or `~/.config/shotsmith/credentials.json`, never from the workspace, and a key file inside a git working tree is refused:
