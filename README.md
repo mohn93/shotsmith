@@ -13,6 +13,7 @@ App Store and Google Play screenshots, written as code by an AI agent and checke
 | `shotsmith claims` | Every visible word comes from `claims.json` with a source |
 | `shotsmith thumbs <target> [--width 300]` | Review row |
 | `shotsmith strip <target>` | Panorama join and seam check |
+| `shotsmith skill path` / `skill install [--dir d] [--force]` | Print the bundled agent skill's folder, or copy it to `~/.claude/skills` |
 
 All commands take `-C <dir>` and `--json`. Requires Node 20+ and `npx playwright install chromium`.
 
