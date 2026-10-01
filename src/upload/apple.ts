@@ -1,7 +1,10 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import type { ResolvedConfig } from "../config/schema.js";
 import { type HttpRequest, type Method, StoreError, type Transport, parseJson } from "./http.js";
-import type { LocalSet } from "./local.js";
-import { type PlannedSet, type RemoveReason, type UploadPlan, makePlan } from "./plan.js";
+import type { LocalFile, LocalSet } from "./local.js";
+import { type AppliedSet, type PlannedSet, type RemoveReason, type UploadPlan, type UploadReport, makePlan, samePlan } from "./plan.js";
 
 export const ASC = "https://api.appstoreconnect.apple.com";
 // Version states in which screenshots can still change.
@@ -132,4 +135,106 @@ export async function planApple(cfg: ResolvedConfig, local: LocalSet[], o: { ver
   }
   const plan = makePlan({ store: "apple", app: bundleId, version: version.version, sets: sets.map((s) => s.plan), problems: [...problems] }, new Date(deps.now?.() ?? Date.now()));
   return { plan, sets };
+}
+
+export const PROCESSING_LIMIT_MS = 5 * 60_000;
+const POLL_MS = 2000;
+const md5 = (b: Buffer) => crypto.createHash("md5").update(b).digest("hex");
+interface Run { log: (line: string) => void; now: () => number; sleep: (ms: number) => Promise<void> }
+
+// Recomputes the plan and applies it only when it matches the saved plan the user reviewed. Never submits for review.
+export async function applyApple(cfg: ResolvedConfig, local: LocalSet[], o: { version?: string }, saved: UploadPlan | null, deps: AppleDeps): Promise<UploadReport> {
+  const now = deps.now ?? Date.now;
+  const fresh = await planApple(cfg, local, { version: o.version ?? saved?.version ?? undefined }, deps);
+  if (fresh.plan.problems.length) throw new Error(`The plan has problems, so nothing was changed:\n- ${fresh.plan.problems.join("\n- ")}`);
+  samePlan(cfg, saved, fresh.plan);
+  const c = new AscClient(deps);
+  const run: Run = { log: deps.log ?? (() => {}), now, sleep: deps.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))) };
+  const report: UploadReport = {
+    store: "apple", app: fresh.plan.app, version: fresh.plan.version, digest: fresh.plan.digest, editId: null,
+    startedAt: new Date(now()).toISOString(), finishedAt: "", ok: false, error: null, sets: [],
+  };
+  try {
+    for (const s of fresh.sets) report.sets.push(await applySet(c, s, run));
+    report.ok = true;
+  } catch (e) {
+    report.error = (e as Error).message;
+  }
+  report.finishedAt = new Date(now()).toISOString();
+  return report;
+}
+
+async function applySet(c: AscClient, s: AppleSet, run: Run): Promise<AppliedSet> {
+  const { plan: p, local } = s;
+  const head = { locale: p.locale, storeLocale: p.storeLocale, target: p.target, slot: p.slot };
+  const md5Of = (file: string) => local.files.find((f) => f.rel === file)!.md5;
+  if (p.status === "unchanged") return { ...head, status: "unchanged", deleted: [], uploaded: [], order: p.keep.map((k) => ({ file: k.file, id: k.id, checksum: md5Of(k.file) })) };
+  const where = `${p.storeLocale} ${p.slot}`;
+  try {
+    const setId = s.setId ?? String((await c.request("POST", "/v1/appScreenshotSets", {
+      data: { type: "appScreenshotSets", attributes: { screenshotDisplayType: p.slot }, relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: s.localizationId } } } },
+    })).data.id);
+    // A set holds at most 10 screenshots, so there is no room to stage new ones beside the old: remove first.
+    for (const r of p.remove) await c.request("DELETE", `/v1/appScreenshots/${r.id}`);
+    const ids = new Map(p.keep.map((k) => [k.file, k.id]));
+    const uploaded: AppliedSet["uploaded"] = [];
+    for (const u of p.upload) {
+      const id = await uploadShot(c, setId, local.files.find((f) => f.rel === u.file)!);
+      ids.set(u.file, id);
+      uploaded.push({ file: u.file, id });
+      run.log(`${where}: uploaded ${u.file}`);
+    }
+    await waitProcessed(c, uploaded.map((u) => u.id), run);
+    const order = p.order.map((file) => ({ file, id: ids.get(file)!, checksum: md5Of(file) }));
+    await c.request("PATCH", `/v1/appScreenshotSets/${setId}/relationships/appScreenshots`, { data: order.map((x) => ({ type: "appScreenshots", id: x.id })) });
+    // Read back what App Store Connect now holds.
+    const after = (await c.all(`/v1/appScreenshotSets/${setId}/appScreenshots?limit=200`)).map(shotOf);
+    const same = after.length === order.length && after.every((a, i) => a.id === order[i].id && a.checksum === order[i].checksum && a.state === "COMPLETE");
+    if (!same) throw new Error("after the upload the set differs from the export in order or content");
+    run.log(`${where}: ${order.length} screenshot(s) in order and verified`);
+    return { ...head, status: "changed", deleted: p.remove.map((r) => r.id), uploaded, order };
+  } catch (e) {
+    throw new Error(`${where}: ${(e as Error).message}`);
+  }
+}
+
+// Reserve, upload the parts, then commit with the MD5 checksum.
+async function uploadShot(c: AscClient, setId: string, f: LocalFile): Promise<string> {
+  const bytes = fs.readFileSync(f.file);
+  if (md5(bytes) !== f.md5) throw new Error(`${f.rel} changed after the plan was made; run the plan again`);
+  const shot = (await c.request("POST", "/v1/appScreenshots", {
+    data: { type: "appScreenshots", attributes: { fileName: path.basename(f.file), fileSize: bytes.length }, relationships: { appScreenshotSet: { data: { type: "appScreenshotSets", id: setId } } } },
+  })).data as Resource;
+  for (const op of (shot.attributes.uploadOperations ?? []) as Json[]) {
+    const url = new URL(op.url);
+    // The file only ever goes to Apple.
+    if (url.protocol !== "https:" || !(url.hostname === "apple.com" || url.hostname.endsWith(".apple.com"))) {
+      throw new Error(`App Store Connect asked for an upload to ${url.origin}; refusing to send ${f.rel} outside apple.com`);
+    }
+    const headers = Object.fromEntries(((op.requestHeaders ?? []) as Json[]).map((h) => [String(h.name), String(h.value)]));
+    const r = await c.raw({ method: op.method as Method, url: op.url, headers, body: bytes.subarray(op.offset, op.offset + op.length) });
+    if (r.status >= 300) throw new StoreError(`uploading part of ${f.rel} failed (${r.status})`, r.status);
+  }
+  await c.request("PATCH", `/v1/appScreenshots/${shot.id}`, { data: { type: "appScreenshots", id: shot.id, attributes: { uploaded: true, sourceFileChecksum: f.md5 } } });
+  return shot.id;
+}
+
+async function waitProcessed(c: AscClient, ids: string[], run: Run): Promise<void> {
+  const deadline = run.now() + PROCESSING_LIMIT_MS;
+  let pending = [...ids];
+  while (pending.length) {
+    const next: string[] = [];
+    for (const id of pending) {
+      const shot = (await c.request("GET", `/v1/appScreenshots/${id}`)).data as Resource;
+      const delivery = shot.attributes.assetDeliveryState ?? {};
+      if (delivery.state === "FAILED") throw new Error(`App Store Connect could not process screenshot ${id}: ${JSON.stringify(delivery.errors ?? [])}`);
+      if (delivery.state !== "COMPLETE") next.push(id);
+    }
+    pending = next;
+    if (!pending.length) return;
+    if (run.now() >= deadline) {
+      throw new Error(`${pending.length} screenshot(s) still processing after 5 minutes. Plan again later: finished screenshots are kept and unfinished ones replaced`);
+    }
+    await run.sleep(POLL_MS);
+  }
 }
