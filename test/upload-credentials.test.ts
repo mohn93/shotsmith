@@ -2,11 +2,17 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { appleCredentials, credentialsPath, gitWorkTree, playCredentials, playKey, readKey } from "../src/upload/credentials.js";
 
 // Outside the repository on purpose: keys inside a git working tree are refused.
-const tmp = (p: string) => fs.mkdtempSync(path.join(os.tmpdir(), `shotsmith-${p}-`));
+const made: string[] = [];
+const tmp = (p: string) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `shotsmith-${p}-`));
+  made.push(dir);
+  return dir;
+};
+afterAll(() => { for (const dir of made) fs.rmSync(dir, { recursive: true, force: true }); });
 function homeWith(content: unknown): string {
   const home = tmp("home");
   fs.mkdirSync(path.dirname(credentialsPath(home)), { recursive: true });
@@ -39,6 +45,10 @@ describe("credentials", () => {
 });
 
 describe("readKey", () => {
+  it("runs with os.tmpdir() outside any git working tree", () => {
+    expect(gitWorkTree(fs.realpathSync(os.tmpdir())), "os.tmpdir() is inside a git working tree; key-guard tests need it outside").toBeNull();
+  });
+
   it("reads a key outside the workspace and any repository", () => {
     const dir = tmp("keys");
     fs.writeFileSync(path.join(dir, "k.p8"), "KEY");
@@ -61,6 +71,19 @@ describe("readKey", () => {
     fs.symlinkSync(path.join(repo, "secrets/k.p8"), path.join(links, "k.p8"));
     expect(() => readKey(path.join(links, "k.p8"), tmp("ws"))).toThrow(/inside the git working tree/);
     expect(gitWorkTree(fs.realpathSync(path.join(repo, "secrets/k.p8")))).toBe(fs.realpathSync(repo));
+  });
+
+  // On a case-insensitive volume the same folder can be written in another letter case; the guard must still see it.
+  const sameFolder = (() => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "shotsmith-case-"));
+    made.push(dir);
+    return fs.existsSync(path.join(path.dirname(dir), path.basename(dir).toUpperCase()));
+  })();
+  it.skipIf(!sameFolder)("refuses a key inside the workspace when its path differs only in letter case", () => {
+    const ws = tmp("ws");
+    fs.writeFileSync(path.join(ws, "k.p8"), "KEY");
+    const upper = path.join(path.dirname(ws), path.basename(ws).toUpperCase(), "k.p8");
+    expect(() => readKey(upper, ws)).toThrow(/inside the workspace/);
   });
 
   it("names a missing key file", () => {

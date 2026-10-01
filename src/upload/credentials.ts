@@ -65,12 +65,12 @@ const within = (p: string, dir: string): boolean => {
 };
 
 // Store keys are read only from outside the workspace and outside any git working tree, where they could be committed.
-// The check uses the real path, so a link cannot hide where the key is.
+// The check uses the native real path, so neither a link nor a different letter case (case-insensitive volumes) can hide where the key is.
 export function readKey(keyPath: string, workspace: string): string {
   let real: string;
-  try { real = fs.realpathSync(keyPath); } catch { throw new Error(`Key file ${keyPath} does not exist`); }
+  try { real = fs.realpathSync.native(keyPath); } catch { throw new Error(`Key file ${keyPath} does not exist`); }
   const move = "Move it outside any repository, for example to ~/.config/shotsmith/, and point the credentials at it";
-  if (within(real, fs.realpathSync(workspace))) throw new Error(`Key file ${keyPath} is inside the workspace, where it could be committed. ${move}`);
+  if (within(real, fs.realpathSync.native(workspace))) throw new Error(`Key file ${keyPath} is inside the workspace, where it could be committed. ${move}`);
   const repo = gitWorkTree(real);
   if (repo) throw new Error(`Key file ${keyPath} is inside the git working tree ${repo}, where it could be committed. ${move}`);
   return fs.readFileSync(real, "utf8");
