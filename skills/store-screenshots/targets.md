@@ -37,7 +37,17 @@ A custom target is `{ "name", "w", "h", "platform" }` in `targets`; Apple target
 
 ## Uploading (only when the user asks)
 
-- **App Store:** screenshots change only on a version in an editable state (Prepare for Submission). If the live version is the latest, a new version (and build) is needed. Upload through the App Store Connect API: reserve each `appScreenshot`, PUT the parts, PATCH `uploaded: true` with the MD5 `sourceFileChecksum`, poll until `COMPLETE` (allow 5 minutes), then order the set. Delete superseded and unprocessed screenshots first (10-image cap). Read back checksums and order afterwards.
-- **Google Play:** create an edit, delete and re-upload each image slot in order, check the returned sha256 values, validate, and commit only after the user confirms. An edit is discarded when anything else changes the app first; re-stage and commit if the commit says "This Edit has been deleted". With managed publishing, committed changes wait in Publishing overview.
-- A 403 on creating a Play edit means the service account lacks store listing permission for the app; the user grants it in Play Console.
-- Confirm with the user before committing a Play edit, submitting an App Store version, or replacing a live set.
+`shotsmith upload apple` and `shotsmith upload play` send `export/` to the stores. Without a flag they only plan: they print what would be kept, deleted and uploaded and the final order per language and slot, write `export/upload-plan-apple.json` or `export/upload-plan-play.json`, and change nothing. Exit 1 means the plan has problems (exports that fail `check`, a language the store listing lacks, a target with no slot); fix them and plan again.
+
+- Credentials come from the environment or `~/.config/shotsmith/credentials.json`, never from the workspace. A key file inside any git working tree is refused.
+
+  | Store | Environment | `credentials.json` |
+  | --- | --- | --- |
+  | App Store Connect: API key with the App Manager or Admin role | `SHOTSMITH_ASC_ISSUER_ID`, `SHOTSMITH_ASC_KEY_ID`, `SHOTSMITH_ASC_KEY_PATH` (the .p8 file) | `"apple": { "issuerId", "keyId", "keyPath" }` |
+  | Google Play: service account with store listing permission | `SHOTSMITH_PLAY_KEY_PATH` (the JSON key) | `"play": { "keyPath" }` |
+
+- **App Store:** `shotsmith upload apple [--app-version <v>] [-l <codes>] [--apply]`. Screenshots change only on a version in an editable state (Prepare for Submission or rejected); `--app-version` picks one when several are editable. If none is, the user creates a new version (and build) in App Store Connect first. `--apply` keeps screenshots whose MD5 matches and that finished processing, deletes superseded, failed and stuck ones first (10-image cap), uploads the rest, waits up to 5 minutes for processing, orders the set and reads checksums and order back into `export/upload-report-apple.json`. It never submits for review.
+- **Google Play:** `shotsmith upload play [-l <codes>] [--apply | --commit <editId>]`. The plan compares each listing language and slot by sha256. `--apply` replaces the changed slots in one draft edit, checks the sha256 values, validates the edit and prints its id; nothing is live. `shotsmith upload play --commit <editId>` publishes it. "No longer has edit": Play discards an edit when anything else changes the app first; run `--apply` again and commit the new edit. With managed publishing, committed changes wait in Publishing overview. A 403 means the service account lacks store listing permission for the app; the user grants it in Play Console.
+- `--apply` refuses when the exports, the store, the locales or the version changed since the saved plan. Plan again and show the user the new plan.
+- A locale's `apple` or `play` code must already exist on the version or listing; Shotsmith does not add languages or change store text. Custom Apple targets upload only at a size in the 6.9", 6.5" or 13" class.
+- Confirm with the user before `--apply`, before `--commit`, and before replacing a live set.

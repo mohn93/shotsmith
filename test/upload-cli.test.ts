@@ -67,4 +67,12 @@ describe("upload command", () => {
     expect(r.code).toBe(2);
     expect(json(r).error.message).toMatch(/no "apple"/);
   });
+
+  it("has every flag the skill names", () => {
+    const text = fs.readFileSync(path.join(ROOT, "skills/store-screenshots/targets.md"), "utf8");
+    const help = run(["upload", "apple", "--help"]).out + run(["upload", "play", "--help"]).out;
+    const flags = [...new Set([...text.matchAll(/`[^`]*upload (?:apple|play)[^`]*`/g)].flatMap((m) => m[0].match(/--[a-z-]+/g) ?? []))];
+    expect(flags.length).toBeGreaterThan(2);
+    for (const f of flags) expect(help, f).toContain(f);
+  });
 });

@@ -73,4 +73,15 @@ describe("skill content", () => {
     expect(fs.existsSync(path.join(dir, "skills/store-screenshots/reference/examples/app/pages/01.html"))).toBe(true);
     expect(sync("--check").stdout).toBe("");
   });
+
+  it("describes the upload commands, their confirmations and credentials", () => {
+    const skill = read("SKILL.md"), targets = read("targets.md");
+    for (const s of ["upload apple", "upload play", "--apply", "--commit"]) expect(skill, s).toContain(s);
+    expect(skill).toMatch(/[Nn]ever submit/);
+    expect(skill).not.toContain("lists an `upload` command");
+    for (const s of ["SHOTSMITH_ASC_ISSUER_ID", "SHOTSMITH_ASC_KEY_ID", "SHOTSMITH_ASC_KEY_PATH", "SHOTSMITH_PLAY_KEY_PATH", "credentials.json", "--app-version", "upload-plan-", "upload-report-apple.json"]) {
+      expect(targets, s).toContain(s);
+    }
+    expect(targets).not.toMatch(/upload apple[^\n]*--version/);
+  });
 });
