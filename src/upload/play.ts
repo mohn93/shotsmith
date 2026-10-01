@@ -1,7 +1,9 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
 import type { ResolvedConfig } from "../config/schema.js";
 import { type Method, StoreError, type Transport, parseJson } from "./http.js";
 import type { LocalSet } from "./local.js";
-import { type PlannedSet, type UploadPlan, makePlan } from "./plan.js";
+import { type AppliedSet, type PlannedSet, type UploadPlan, type UploadReport, makePlan, samePlan } from "./plan.js";
 
 export const PLAY_API = "https://androidpublisher.googleapis.com";
 export interface PlayDeps { transport: Transport; token: () => Promise<string>; log?: (line: string) => void; now?: () => number }
@@ -93,4 +95,97 @@ export async function planPlay(cfg: ResolvedConfig, local: LocalSet[], deps: Pla
   } finally {
     await c.deleteEdit(edit).catch(() => {});
   }
+}
+
+const sha256 = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
+
+export function checkEditId(id: string): void {
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) throw new Error(`"${id}" is not a Play edit id; use the id that shotsmith upload play --apply printed`);
+}
+
+// Recomputes the plan inside a new edit and stages it only when it matches the saved plan the user reviewed. The edit
+// is kept, validated, only when it holds changes; nothing is live until commitPlay.
+export async function applyPlay(cfg: ResolvedConfig, local: LocalSet[], saved: UploadPlan | null, deps: PlayDeps): Promise<UploadReport> {
+  const pkg = playPackage(cfg);
+  const c = new PlayClient(deps, pkg);
+  const now = deps.now ?? Date.now;
+  const log = deps.log ?? (() => {});
+  const edit = await c.openEdit();
+  let keepEdit = false;
+  try {
+    const { pairs, problems } = await readPlay(c, edit, local);
+    if (problems.length) throw new Error(`The plan has problems, so nothing was changed:\n- ${problems.join("\n- ")}`);
+    const fresh = makePlan({ store: "play", app: pkg, version: null, sets: pairs.map((p) => p.plan), problems }, new Date(now()));
+    samePlan(cfg, saved, fresh);
+    const report: UploadReport = {
+      store: "play", app: pkg, version: null, digest: fresh.digest, editId: null,
+      startedAt: new Date(now()).toISOString(), finishedAt: "", ok: false, error: null, sets: [],
+    };
+    try {
+      for (const p of pairs) {
+        // The record goes into the report first, so a failure still shows what was done to this set.
+        const rec: AppliedSet = { locale: p.plan.locale, storeLocale: p.plan.storeLocale, target: p.plan.target, slot: p.plan.slot, status: "failed", deleted: [], uploaded: [], order: [] };
+        report.sets.push(rec);
+        await applyPlaySet(c, edit, p, rec, log);
+      }
+      if (report.sets.some((s) => s.status === "changed")) {
+        await c.validate(edit);
+        report.editId = edit;
+        keepEdit = true;
+      }
+      report.ok = true;
+    } catch (e) {
+      report.error = (e as Error).message;
+    }
+    report.finishedAt = new Date(now()).toISOString();
+    return report;
+  } finally {
+    if (!keepEdit) await c.deleteEdit(edit).catch(() => {});
+  }
+}
+
+// Fills `rec` as it goes: on failure it keeps status "failed" and what was done so far.
+async function applyPlaySet(c: PlayClient, edit: string, { plan: p, local }: PlayPair, rec: AppliedSet, log: (line: string) => void): Promise<void> {
+  if (p.status === "unchanged") {
+    rec.status = "unchanged";
+    rec.order = p.keep.map((k, i) => ({ file: k.file, id: k.id, checksum: local.files[i].sha256 }));
+    return;
+  }
+  const where = `${p.storeLocale} ${p.slot}`;
+  try {
+    // The edit is a draft: nothing reaches the listing until it is committed.
+    await c.clear(edit, p.storeLocale, p.slot);
+    rec.deleted = p.remove.map((r) => r.id);
+    for (const f of local.files) {
+      const bytes = fs.readFileSync(f.file);
+      if (sha256(bytes) !== f.sha256) throw new Error(`${f.rel} changed after the plan was made; run the plan again`);
+      const image = await c.upload(edit, p.storeLocale, p.slot, bytes);
+      if (image.sha256 !== null && image.sha256 !== f.sha256) throw new Error(`Google Play stored ${f.rel} with a different checksum`);
+      rec.uploaded.push({ file: f.rel, id: image.id });
+      log(`${where}: uploaded ${f.rel}`);
+    }
+    const after = await c.images(edit, p.storeLocale, p.slot);
+    if (after.map((i) => i.sha256).join() !== local.files.map((f) => f.sha256).join()) throw new Error("after the upload the edit differs from the export in order or content");
+    rec.order = after.map((img, i) => ({ file: local.files[i].rel, id: img.id, checksum: local.files[i].sha256 }));
+    rec.status = "changed";
+  } catch (e) {
+    throw new Error(`${where}: ${(e as Error).message}`);
+  }
+}
+
+export async function commitPlay(cfg: ResolvedConfig, editId: string, deps: PlayDeps): Promise<{ editId: string; lines: string[] }> {
+  checkEditId(editId);
+  const c = new PlayClient(deps, playPackage(cfg));
+  try {
+    await c.commit(editId);
+  } catch (e) {
+    if (e instanceof StoreError && (e.status === 404 || /edit has been deleted/i.test(e.message))) {
+      throw new Error(`Google Play no longer has edit ${editId}: an edit is discarded when anything else changes the app first, or when it expires. Run shotsmith upload play --apply again, show the user the result, and commit the new edit`);
+    }
+    throw e;
+  }
+  return {
+    editId,
+    lines: [`Committed edit ${editId}.`, "If managed publishing is on for this app, the changes now wait in Publishing overview in Play Console until someone publishes them."],
+  };
 }
