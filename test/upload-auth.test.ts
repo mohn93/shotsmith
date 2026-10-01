@@ -28,6 +28,7 @@ describe("fetchTransport", () => {
 
   it("refuses a redirect instead of re-sending the body to another host", async () => {
     let reached = false;
+    const closed: Promise<void>[] = [];
     const target = http.createServer((req, res) => { reached = true; req.resume(); res.writeHead(200); res.end("x"); });
     await new Promise<void>((r) => target.listen(0, "127.0.0.1", r));
     const first = http.createServer((req, res) => {
@@ -38,13 +39,16 @@ describe("fetchTransport", () => {
     await new Promise<void>((r) => first.listen(0, "127.0.0.1", r));
     try {
       const { port } = first.address() as AddressInfo;
-      await expect(fetchTransport()({ method: "PUT", url: `http://127.0.0.1:${port}/up`, body: "bytes" })).rejects.toThrow();
+      await expect(fetchTransport()({ method: "PUT", url: `http://127.0.0.1:${port}/up`, body: "bytes" })).rejects.toThrow(
+        `PUT http://127.0.0.1:${port}/up answered with a redirect; Shotsmith does not follow redirects for store calls`,
+      );
       expect(reached).toBe(false);
     } finally {
-      first.closeAllConnections?.();
-      target.closeAllConnections?.();
-      first.close();
-      target.close();
+      for (const s of [first, target]) {
+        s.closeAllConnections();
+        closed.push(new Promise<void>((r) => s.close(() => r())));
+      }
+      await Promise.all(closed);
     }
   });
 });
@@ -90,6 +94,41 @@ describe("playTokenSource", () => {
     clock += 56 * 60_000;
     await token();
     expect(seen).toHaveLength(2);
+  });
+
+  it("keeps the token at 54 minutes and fetches a new one at 56", async () => {
+    let n = 0;
+    const transport: Transport = async () => { n++; return { status: 200, text: JSON.stringify({ access_token: `tok${n}`, expires_in: 3600 }) }; };
+    let clock = 1_700_000_000_000;
+    const token = playTokenSource(key, transport, () => clock);
+    await token();
+    clock += 54 * 60_000;
+    expect(await token()).toBe("tok1");
+    expect(n).toBe(1);
+    clock += 2 * 60_000;
+    expect(await token()).toBe("tok2");
+    expect(n).toBe(2);
+  });
+
+  it("shares one exchange between concurrent calls, and retries after a failure", async () => {
+    let n = 0;
+    const transport: Transport = async () => { n++; await new Promise((r) => setTimeout(r, 10)); return n === 1 ? { status: 400, text: "{}" } : { status: 200, text: JSON.stringify({ access_token: "tok", expires_in: 3600 }) }; };
+    const token = playTokenSource(key, transport);
+    const failed = await Promise.allSettled([token(), token()]);
+    expect(failed.map((f) => f.status)).toEqual(["rejected", "rejected"]);
+    expect(n).toBe(1);
+    expect(await Promise.all([token(), token()])).toEqual(["tok", "tok"]);
+    expect(n).toBe(2);
+  });
+
+  it("says when Google answers 200 without an access token", async () => {
+    const transport: Transport = async () => ({ status: 200, text: "{}" });
+    await expect(playTokenSource(key, transport)()).rejects.toThrow("Google sign-in returned no access token");
+  });
+
+  it("explains a sign-in error that is not JSON", async () => {
+    const transport: Transport = async () => ({ status: 502, text: "<html>Bad Gateway</html>" });
+    await expect(playTokenSource(key, transport)()).rejects.toThrow(/Google rejected the service account key: .*Bad Gateway/);
   });
 
   it("explains a rejected key", async () => {

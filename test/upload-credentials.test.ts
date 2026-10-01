@@ -38,6 +38,14 @@ describe("credentials", () => {
     expect(() => playCredentials({}, tmp("home"))).toThrow(/SHOTSMITH_PLAY_KEY_PATH.*credentials\.json/);
   });
 
+  it("reads credentials.json only when the environment leaves a field unset", () => {
+    const home = homeWith("{");
+    const apple = { SHOTSMITH_ASC_ISSUER_ID: "iss", SHOTSMITH_ASC_KEY_ID: "kid", SHOTSMITH_ASC_KEY_PATH: "/keys/a.p8" };
+    expect(appleCredentials(apple, home)).toEqual({ issuerId: "iss", keyId: "kid", keyPath: "/keys/a.p8" });
+    expect(playCredentials({ SHOTSMITH_PLAY_KEY_PATH: "/keys/p.json" }, home)).toEqual({ keyPath: "/keys/p.json" });
+    expect(() => appleCredentials({ ...apple, SHOTSMITH_ASC_KEY_ID: "" }, home)).toThrow(/is not valid JSON/);
+  });
+
   it("rejects a credentials file that is not valid", () => {
     expect(() => appleCredentials({}, homeWith("{"))).toThrow(/is not valid JSON/);
     expect(() => appleCredentials({}, homeWith({ apple: { keyID: "x" } }))).toThrow(/has problems: apple/);
@@ -84,6 +92,32 @@ describe("readKey", () => {
     fs.writeFileSync(path.join(ws, "k.p8"), "KEY");
     const upper = path.join(path.dirname(ws), path.basename(ws).toUpperCase(), "k.p8");
     expect(() => readKey(upper, ws)).toThrow(/inside the workspace/);
+  });
+
+  it("refuses a key in a workspace folder whose name starts with two dots", () => {
+    const ws = tmp("ws");
+    fs.mkdirSync(path.join(ws, "..keys"));
+    fs.writeFileSync(path.join(ws, "..keys", "k.p8"), "KEY");
+    expect(() => readKey(path.join(ws, "..keys", "k.p8"), ws)).toThrow(/inside the workspace/);
+  });
+
+  it("names a missing workspace", () => {
+    const dir = tmp("keys");
+    fs.writeFileSync(path.join(dir, "k.p8"), "KEY");
+    const ws = path.join(tmp("ws"), "gone");
+    expect(() => readKey(path.join(dir, "k.p8"), ws)).toThrow(`Workspace ${ws} does not exist`);
+  });
+
+  it("says so when the git working tree is the home folder", () => {
+    const home = tmp("home");
+    fs.mkdirSync(path.join(home, ".git"));
+    fs.mkdirSync(path.join(home, ".config"));
+    fs.writeFileSync(path.join(home, ".config/k.p8"), "KEY");
+    const key = path.join(home, ".config/k.p8");
+    expect(() => readKey(key, tmp("ws"), home)).toThrow(`your home folder ${fs.realpathSync(home)} is a git repository`);
+    expect(() => readKey(key, tmp("ws"), home)).toThrow(/outside it/);
+    // Any other repository keeps the general message.
+    expect(() => readKey(key, tmp("ws"), tmp("other-home"))).toThrow(/inside the git working tree/);
   });
 
   it("names a missing key file", () => {

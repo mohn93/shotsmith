@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import type { ResolvedConfig } from "../config/schema.js";
-import { type Method, StoreError, type Transport, parseJson } from "./http.js";
+import { type Method, StoreError, type Transport, parseBody } from "./http.js";
 import type { LocalSet } from "./local.js";
 import { type AppliedSet, type PlannedSet, type UploadPlan, type UploadReport, makePlan, samePlan } from "./plan.js";
 
@@ -22,7 +22,7 @@ export class PlayClient {
 
   private async request(method: Method, url: string, body?: string | Uint8Array, type = "application/json"): Promise<Json> {
     const r = await this.d.transport({ method, url, headers: { Authorization: `Bearer ${await this.d.token()}`, ...(body !== undefined ? { "Content-Type": type } : {}) }, body });
-    const data = parseJson(r.text, "Google Play");
+    const data = parseBody(r, "Google Play");
     if (r.status >= 400) throw new StoreError(playMessage(method, url, r.status, data), r.status);
     return data;
   }
@@ -49,7 +49,7 @@ export class PlayClient {
 }
 
 function playMessage(method: string, url: string, status: number, data: Json): string {
-  const detail = typeof data.error?.message === "string" ? data.error.message.replace(/\.+$/, "") : undefined;
+  const detail = typeof data.error?.message === "string" ? data.error.message.replace(/\.+$/, "") : data.rawBody;
   const what = `${method} ${url.replace(/^.*\/applications\//, "applications/").split("?")[0]} failed (${status})${detail ? `: ${detail}` : ""}`;
   // Google answers some permission failures with 401 and "insufficient permissions".
   if (status === 403 || (status === 401 && /insufficient permissions/i.test(data.error?.message ?? ""))) {

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { ResolvedConfig } from "../config/schema.js";
-import { type HttpRequest, type Method, StoreError, type Transport, parseJson } from "./http.js";
+import { type HttpRequest, type Method, StoreError, type Transport, parseBody } from "./http.js";
 import type { LocalFile, LocalSet } from "./local.js";
 import { type AppliedSet, type PlannedSet, type RemoveReason, type UploadPlan, type UploadReport, makePlan, samePlan } from "./plan.js";
 
@@ -31,7 +31,7 @@ export class AscClient {
       headers: { Authorization: `Bearer ${this.d.token()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
-    const data = parseJson(r.text, "App Store Connect");
+    const data = parseBody(r, "App Store Connect");
     if (r.status >= 400) throw new StoreError(ascMessage(method, url, r.status, data), r.status);
     return data;
   }
@@ -54,7 +54,7 @@ export class AscClient {
 }
 
 function ascMessage(method: string, url: string, status: number, data: Json): string {
-  const detail = ((data.errors ?? []) as Json[]).map((e) => e.detail ?? e.title).filter(Boolean).join("; ").replace(/\.+$/, "");
+  const detail = ((data.errors ?? []) as Json[]).map((e) => e.detail ?? e.title).filter(Boolean).join("; ").replace(/\.+$/, "") || String(data.rawBody ?? "");
   const what = `${method} ${url.slice(ASC.length).split("?")[0]} failed (${status})${detail ? `: ${detail}` : ""}`;
   if (status === 401) return `${what}. App Store Connect did not accept the API key: check the issuer id, key id and key file`;
   if (status === 403) return `${what}. The API key's role cannot do this; it needs the App Manager or Admin role`;
