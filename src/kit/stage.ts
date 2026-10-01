@@ -1,5 +1,6 @@
 import type { FormFactor, Platform, Store } from "../config/targets.js";
 import type { KitContext } from "../shared/context.js";
+import { href } from "./device.js";
 import { LOGICAL_WIDTH, state } from "./runtime.js";
 
 export interface Stage {
@@ -9,7 +10,7 @@ export interface Stage {
 }
 
 function fontCss(c: KitContext): string {
-  const faces = Object.values(c.fonts).flatMap((f) => f.faces.map((face) => `@font-face{font-family:"${f.family}";font-weight:${face.weight};src:url("${face.url}")}`));
+  const faces = Object.values(c.fonts).flatMap((f) => f.faces.map((face) => `@font-face{font-family:"${f.family}";font-weight:${face.weight};src:url("${href(face.url)}")}`));
   const vars = Object.entries(c.fonts).map(([role, f]) => `--font-${role}:"${f.family}"`).join(";");
   return `${faces.join("\n")}\n:root{${vars}}`;
 }

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { composeScreen, missingCapture } from "./device.js";
+import { capture, composeScreen } from "./device.js";
 import { ctx, state, waitFor } from "./runtime.js";
 
 export function createRenderer(o: { supersample?: number; z?: number } = {}): THREE.WebGLRenderer {
@@ -62,10 +62,7 @@ const loadImage = (src: string) => new Promise<HTMLImageElement>((res, rej) => {
 export async function phone3d(o: { capture: string; width: number; finish?: "graphite" | "silver"; renderer: THREE.WebGLRenderer; envMap?: THREE.Texture; repaint?: boolean }): Promise<THREE.Group> {
   const c = ctx();
   if (c.target.platform !== "iphone" && c.target.platform !== "android-phone") throw new Error(`phone3d supports phone targets only, not ${c.target.platform}`);
-  const file = c.captures.files[o.capture];
-  if (!file) throw missingCapture(c, o.capture);
-  if (file.fallback) state.warnings.push(`capture.fallback: "${o.capture}" for ${c.locale.code} uses ${file.url}`);
-  const img = await waitFor(loadImage(file.url));
+  const img = await capture(o.capture);
   const scr = composeScreen(img, { repaint: o.repaint });
   const screenImg = await waitFor(loadImage(scr.url));
   const tex = new THREE.Texture(screenImg);
@@ -97,7 +94,6 @@ export async function phone3d(o: { capture: string; width: number; finish?: "gra
   g.add(screen);
   g.scale.setScalar(o.width / sw);
 
-  state.captures.add(file.url);
   state.devices.push({ platform: c.target.platform, capture: o.capture, statusBar: c.captures.statusBar, repaint: !!o.repaint, screen: [scr.w, scr.h] });
   return g;
 }

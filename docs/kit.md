@@ -115,6 +115,14 @@ Captures never fall back across platforms: an iPhone target never reads `inputs/
 
 `shotsmith init` writes a placeholder capture at `inputs/iphone/en/home.png`. Until you replace it, `check` fails with `capture.placeholder`. Only captures of platforms that have targets are checked, so a Google Play-only workspace can leave it or delete it.
 
+### capture
+
+```js
+const img = await capture("home");
+```
+
+Loads a capture as a decoded `<img>` for page art outside a device frame: rows cropped onto canvases, a card stack, a texture. It uses the same lookup, fallback warning and platform rule as `device()`, and the capture counts as used. Draw it with `drawImage` on your own canvas; text in a capture is part of the image and needs no claim.
+
 ## lift
 
 ```js
