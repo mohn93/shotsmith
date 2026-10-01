@@ -5,7 +5,8 @@ export interface HttpResponse { status: number; text: string }
 export type Transport = (req: HttpRequest) => Promise<HttpResponse>;
 
 export const fetchTransport = (timeoutMs = 120_000): Transport => async (req) => {
-  const r = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body as BodyInit | undefined, signal: AbortSignal.timeout(timeoutMs) });
+  // Stores never redirect these calls, and following one would re-send file bytes to another host.
+  const r = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body as BodyInit | undefined, redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
   return { status: r.status, text: await r.text() };
 };
 

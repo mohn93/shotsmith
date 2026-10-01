@@ -24,6 +24,28 @@ describe("fetchTransport", () => {
       server.close();
     }
   });
+
+  it("refuses a redirect instead of re-sending the body to another host", async () => {
+    let reached = false;
+    const target = http.createServer((req, res) => { reached = true; req.resume(); res.writeHead(200); res.end("x"); });
+    await new Promise<void>((r) => target.listen(0, "127.0.0.1", r));
+    const first = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(307, { Location: `http://127.0.0.1:${(target.address() as AddressInfo).port}/stolen` });
+      res.end();
+    });
+    await new Promise<void>((r) => first.listen(0, "127.0.0.1", r));
+    try {
+      const { port } = first.address() as AddressInfo;
+      await expect(fetchTransport()({ method: "PUT", url: `http://127.0.0.1:${port}/up`, body: "bytes" })).rejects.toThrow();
+      expect(reached).toBe(false);
+    } finally {
+      first.closeAllConnections?.();
+      target.closeAllConnections?.();
+      first.close();
+      target.close();
+    }
+  });
 });
 
 describe("parseJson", () => {

@@ -155,7 +155,12 @@ export async function applyApple(cfg: ResolvedConfig, local: LocalSet[], o: { ve
     startedAt: new Date(now()).toISOString(), finishedAt: "", ok: false, error: null, sets: [],
   };
   try {
-    for (const s of fresh.sets) report.sets.push(await applySet(c, s, run));
+    for (const s of fresh.sets) {
+      // The record goes into the report first, so a failure still shows what was done to this set.
+      const rec: AppliedSet = { locale: s.plan.locale, storeLocale: s.plan.storeLocale, target: s.plan.target, slot: s.plan.slot, status: "failed", deleted: [], uploaded: [], order: [] };
+      report.sets.push(rec);
+      await applySet(c, s, rec, run);
+    }
     report.ok = true;
   } catch (e) {
     report.error = (e as Error).message;
@@ -164,27 +169,33 @@ export async function applyApple(cfg: ResolvedConfig, local: LocalSet[], o: { ve
   return report;
 }
 
-async function applySet(c: AscClient, s: AppleSet, run: Run): Promise<AppliedSet> {
+// Fills `rec` as it goes: on failure it keeps status "failed" and what was done so far.
+async function applySet(c: AscClient, s: AppleSet, rec: AppliedSet, run: Run): Promise<void> {
   const { plan: p, local } = s;
-  const head = { locale: p.locale, storeLocale: p.storeLocale, target: p.target, slot: p.slot };
   const md5Of = (file: string) => local.files.find((f) => f.rel === file)!.md5;
-  if (p.status === "unchanged") return { ...head, status: "unchanged", deleted: [], uploaded: [], order: p.keep.map((k) => ({ file: k.file, id: k.id, checksum: md5Of(k.file) })) };
+  if (p.status === "unchanged") {
+    rec.status = "unchanged";
+    rec.order = p.keep.map((k) => ({ file: k.file, id: k.id, checksum: md5Of(k.file) }));
+    return;
+  }
   const where = `${p.storeLocale} ${p.slot}`;
   try {
     const setId = s.setId ?? String((await c.request("POST", "/v1/appScreenshotSets", {
       data: { type: "appScreenshotSets", attributes: { screenshotDisplayType: p.slot }, relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: s.localizationId } } } },
     })).data.id);
     // A set holds at most 10 screenshots, so there is no room to stage new ones beside the old: remove first.
-    for (const r of p.remove) await c.request("DELETE", `/v1/appScreenshots/${r.id}`);
+    for (const r of p.remove) {
+      await c.request("DELETE", `/v1/appScreenshots/${r.id}`);
+      rec.deleted.push(r.id);
+    }
     const ids = new Map(p.keep.map((k) => [k.file, k.id]));
-    const uploaded: AppliedSet["uploaded"] = [];
     for (const u of p.upload) {
       const id = await uploadShot(c, setId, local.files.find((f) => f.rel === u.file)!);
       ids.set(u.file, id);
-      uploaded.push({ file: u.file, id });
+      rec.uploaded.push({ file: u.file, id });
       run.log(`${where}: uploaded ${u.file}`);
     }
-    await waitProcessed(c, uploaded.map((u) => u.id), run);
+    await waitProcessed(c, rec.uploaded.map((u) => u.id), run);
     const order = p.order.map((file) => ({ file, id: ids.get(file)!, checksum: md5Of(file) }));
     await c.request("PATCH", `/v1/appScreenshotSets/${setId}/relationships/appScreenshots`, { data: order.map((x) => ({ type: "appScreenshots", id: x.id })) });
     // Read back what App Store Connect now holds.
@@ -192,7 +203,8 @@ async function applySet(c: AscClient, s: AppleSet, run: Run): Promise<AppliedSet
     const same = after.length === order.length && after.every((a, i) => a.id === order[i].id && a.checksum === order[i].checksum && a.state === "COMPLETE");
     if (!same) throw new Error("after the upload the set differs from the export in order or content");
     run.log(`${where}: ${order.length} screenshot(s) in order and verified`);
-    return { ...head, status: "changed", deleted: p.remove.map((r) => r.id), uploaded, order };
+    rec.order = order;
+    rec.status = "changed";
   } catch (e) {
     throw new Error(`${where}: ${(e as Error).message}`);
   }

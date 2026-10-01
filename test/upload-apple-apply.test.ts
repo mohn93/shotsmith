@@ -86,6 +86,19 @@ describe("applyApple", () => {
     expect(report.finishedAt).not.toBe("");
   });
 
+  it("records what a failed set had already done, and does not start later sets", async () => {
+    const { cfg, sets, fake, plan } = await planned((f) => {
+      f.seed("loc-en", "APP_IPHONE_67", [{ checksum: "old" }]);
+    });
+    fake.processingPolls = 100_000;
+    const report = await applyApple(cfg, sets, {}, plan, deps(fake));
+    expect(report.ok).toBe(false);
+    expect(report.sets).toHaveLength(1);
+    expect(report.sets[0]).toMatchObject({ storeLocale: "en-US", status: "failed" });
+    expect(report.sets[0].deleted).toHaveLength(1);
+    expect(report.sets[0].uploaded).toHaveLength(2);
+  });
+
   it("gives up after five minutes of processing", async () => {
     const { cfg, sets, fake, plan } = await planned();
     fake.processingPolls = 100_000;

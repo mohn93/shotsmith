@@ -25,7 +25,7 @@ export interface AppliedSet {
   storeLocale: string;
   target: string;
   slot: string;
-  status: "unchanged" | "changed";
+  status: "unchanged" | "changed" | "failed";
   deleted: string[];
   uploaded: { file: string; id: string }[];
   order: { file: string; id: string; checksum: string }[];
@@ -103,5 +103,5 @@ export function describePlan(p: UploadPlan): string[] {
 }
 
 export function describeReport(r: UploadReport): string[] {
-  return r.sets.map((s) => `${head(s)}: ${s.status === "unchanged" ? "unchanged" : `deleted ${s.deleted.length}, uploaded ${s.uploaded.length}, ${s.order.length} in order and verified`}`);
+  return r.sets.map((s) => `${head(s)}: ${s.status === "unchanged" ? "unchanged" : s.status === "failed" ? `failed after deleting ${s.deleted.length} and uploading ${s.uploaded.length}` : `deleted ${s.deleted.length}, uploaded ${s.uploaded.length}, ${s.order.length} in order and verified`}`);
 }
