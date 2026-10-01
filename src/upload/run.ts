@@ -1,7 +1,7 @@
 import type { ResolvedConfig } from "../config/schema.js";
 import { type AppleDeps, appleApp, applyApple, planApple } from "./apple.js";
 import { localSets } from "./local.js";
-import { type UploadPlan, type UploadReport, clearReport, describePlan, describeReport, makePlan, planPath, reportPath, requirePlan, writeJson } from "./plan.js";
+import { type UploadPlan, type UploadReport, describePlan, describeReport, makePlan, planPath, reportPath, requirePlan, startReport, writeJson } from "./plan.js";
 import { type PlayDeps, applyPlay, checkCommit, commitPlay, planPlay, playPackage } from "./play.js";
 import { SERVICE_NAME, rel } from "./util.js";
 
@@ -19,7 +19,7 @@ function planOutcome(cfg: ResolvedConfig, plan: UploadPlan, next: string, save =
   return done(true, 0, `Nothing was changed. Show this plan to the user; ${next}`);
 }
 
-const touched = (report: UploadReport) => report.sets.some((s) => s.deleted.length || s.uploaded.length);
+const touched = (report: UploadReport) => report.sets.some((s) => s.changedStore);
 
 // A failed apply still leaves its report and says what it did before it stopped, then fails the command (exit 2).
 function reportOutcome(cfg: ResolvedConfig, report: UploadReport, last: string[]): UploadOutcome {
@@ -44,7 +44,7 @@ export async function runApple(cfg: ResolvedConfig, o: UploadOptions, connect: (
   const scan = await localSets(cfg, "apple", { locales: o.locales });
   if (scan.problems.length) return planOutcome(cfg, makePlan({ store: "apple", app, version: null, sets: [], problems: scan.problems }), "", !o.apply);
   const saved = o.apply ? requirePlan(cfg, "apple") : null;
-  if (saved) clearReport(cfg, "apple");
+  if (saved) startReport(cfg, "apple", app);
   const deps = connect();
   if (!saved) return planOutcome(cfg, (await planApple(cfg, scan.sets, { version: o.version }, deps)).plan, "run again with --apply only after they confirm.");
   const report = await applyApple(cfg, scan.sets, { version: o.version }, saved, deps);
@@ -64,7 +64,7 @@ export async function runPlay(cfg: ResolvedConfig, o: UploadOptions, connect: ()
   const scan = await localSets(cfg, "play", { locales: o.locales });
   if (scan.problems.length) return planOutcome(cfg, makePlan({ store: "play", app, version: null, sets: [], problems: scan.problems }), "", !o.apply);
   const saved = o.apply ? requirePlan(cfg, "play") : null;
-  if (saved) clearReport(cfg, "play");
+  if (saved) startReport(cfg, "play", app);
   const deps = connect();
   if (!saved) return planOutcome(cfg, await planPlay(cfg, scan.sets, deps), "run again with --apply to stage the changes in a draft edit after they confirm; nothing goes live until --commit.");
   const report = await applyPlay(cfg, scan.sets, saved, deps);

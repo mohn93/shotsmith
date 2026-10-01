@@ -204,10 +204,10 @@ describe("plans", () => {
     expect(describeReport({
       store: "apple", app: "a", version: "1.1", digest: "d", editId: null, editExpiresAt: null, startedAt: "", finishedAt: "", ok: true, error: null,
       sets: [
-        { ...head, status: "changed", deleted: ["2"], uploaded: [{ file: "f", id: "3" }], order: [{ file: "e", id: "1", checksum: "x" }, { file: "f", id: "3", checksum: "y" }] },
-        { ...head, storeLocale: "de-DE", status: "unchanged", deleted: [], uploaded: [], order: [] },
-        { ...head, storeLocale: "fr-FR", status: "failed", deleted: ["9"], uploaded: [{ file: "f", id: "3" }, { file: "g", id: "4" }], order: [] },
-        { ...head, storeLocale: "es-ES", status: "discarded", deleted: [], uploaded: [{ file: "f", id: "5" }], order: [] },
+        { ...head, status: "changed", changedStore: true, deleted: ["2"], uploaded: [{ file: "f", id: "3" }], order: [{ file: "e", id: "1", checksum: "x" }, { file: "f", id: "3", checksum: "y" }] },
+        { ...head, storeLocale: "de-DE", status: "unchanged", changedStore: false, deleted: [], uploaded: [], order: [] },
+        { ...head, storeLocale: "fr-FR", status: "failed", changedStore: true, deleted: ["9"], uploaded: [{ file: "f", id: "3" }, { file: "g", id: "4" }], order: [] },
+        { ...head, storeLocale: "es-ES", status: "discarded", changedStore: true, deleted: [], uploaded: [{ file: "f", id: "5" }], order: [] },
       ],
     })).toEqual(["en-US iphone-6.9 (APP_IPHONE_67): deleted 1, uploaded 1, 2 in order and verified", "de-DE iphone-6.9 (APP_IPHONE_67): unchanged", "fr-FR iphone-6.9 (APP_IPHONE_67): failed after deleting 1 and uploading 2", "es-ES iphone-6.9 (APP_IPHONE_67): not applied; the Google Play listing is unchanged"]);
   });

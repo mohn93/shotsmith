@@ -27,6 +27,9 @@ export interface AppliedSet {
   target: string;
   slot: string;
   status: "unchanged" | "changed" | "failed" | "discarded";
+  // True once any write to the store succeeded for this set (a new set, a delete, a reservation, an upload, a reorder),
+  // including a reservation that could not be deleted again.
+  changedStore: boolean;
   deleted: string[];
   uploaded: { file: string; id: string }[];
   order: { file: string; id: string; checksum: string }[];
@@ -85,12 +88,12 @@ export function writeJson(cfg: ResolvedConfig, file: string, data: unknown): str
   return file;
 }
 
-// An earlier report must not pass for the report of an apply that did not run.
-export function clearReport(cfg: ResolvedConfig, store: Store): void {
-  const file = reportPath(cfg, store);
-  if (!lstatOrNull(file)) return;
-  checkWritable(cfg, file);
-  fs.rmSync(file);
+// An earlier report must not pass for the report of an apply that did not run: --apply starts by replacing it with a
+// report that says the apply did not finish, which the apply's own report then overwrites.
+export function startReport(cfg: ResolvedConfig, store: Store, app: string, now = new Date()): void {
+  const at = now.toISOString();
+  const report: UploadReport = { store, app, version: null, digest: "", editId: null, editExpiresAt: null, startedAt: at, finishedAt: at, ok: false, error: "apply did not finish", sets: [] };
+  writeJson(cfg, reportPath(cfg, store), report);
 }
 
 export function readPlan(cfg: ResolvedConfig, store: Store): UploadPlan | null {

@@ -134,7 +134,7 @@ export async function applyPlay(cfg: ResolvedConfig, local: LocalSet[], saved: U
     try {
       for (const p of pairs) {
         // The record goes into the report first, so a failure still shows what was done to this set.
-        const rec: AppliedSet = { locale: p.plan.locale, storeLocale: p.plan.storeLocale, target: p.plan.target, slot: p.plan.slot, status: "failed", deleted: [], uploaded: [], order: [] };
+        const rec: AppliedSet = { locale: p.plan.locale, storeLocale: p.plan.storeLocale, target: p.plan.target, slot: p.plan.slot, status: "failed", changedStore: false, deleted: [], uploaded: [], order: [] };
         report.sets.push(rec);
         await applyPlaySet(c, edit, p, rec, log);
       }
@@ -174,11 +174,13 @@ async function applyPlaySet(c: PlayClient, edit: string, { plan: p, local }: Pla
   try {
     // The edit is a draft: nothing reaches the listing until it is committed.
     await c.clear(edit, p.storeLocale, p.slot);
+    rec.changedStore = true;
     rec.deleted = p.remove.map((r) => r.id);
     for (const f of local.files) {
       const bytes = fs.readFileSync(f.file);
       if (sha256(bytes) !== f.sha256) throw new Error(`${f.rel} changed after the plan was made; run the plan again`);
       const image = await c.upload(edit, p.storeLocale, p.slot, bytes);
+      rec.changedStore = true;
       if (image.id === null) throw new Error(`Google Play returned no image id for ${f.rel}`);
       if (image.sha256 !== null && image.sha256 !== f.sha256) throw new Error(`Google Play stored ${f.rel} with a different checksum`);
       rec.uploaded.push({ file: f.rel, id: image.id });

@@ -159,7 +159,7 @@ export async function applyApple(cfg: ResolvedConfig, local: LocalSet[], o: { ve
   try {
     for (const s of fresh.sets) {
       // The record goes into the report first, so a failure still shows what was done to this set.
-      const rec: AppliedSet = { locale: s.plan.locale, storeLocale: s.plan.storeLocale, target: s.plan.target, slot: s.plan.slot, status: "failed", deleted: [], uploaded: [], order: [] };
+      const rec: AppliedSet = { locale: s.plan.locale, storeLocale: s.plan.storeLocale, target: s.plan.target, slot: s.plan.slot, status: "failed", changedStore: false, deleted: [], uploaded: [], order: [] };
       report.sets.push(rec);
       await applySet(c, s, rec, run);
     }
@@ -187,15 +187,17 @@ async function applySet(c: AscClient, s: AppleSet, rec: AppliedSet, run: Run): P
     const setId = s.setId ?? String((await c.request("POST", "/v1/appScreenshotSets", {
       data: { type: "appScreenshotSets", attributes: { screenshotDisplayType: p.slot }, relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: s.localizationId } } } },
     })).data.id);
+    if (!s.setId) rec.changedStore = true;
     // A set holds at most 10 screenshots, so there is no room to stage new ones beside the old: remove first.
     for (const r of p.remove) {
       await c.request("DELETE", `/v1/appScreenshots/${r.id}`);
+      rec.changedStore = true;
       rec.deleted.push(r.id);
       run.log(`${where}: deleted ${r.id} (${r.reason})`);
     }
     const ids = new Map(p.keep.map((k) => [k.file, k.id]));
     for (const u of p.upload) {
-      const id = await uploadShot(c, setId, local.files.find((f) => f.rel === u.file)!);
+      const id = await uploadShot(c, setId, local.files.find((f) => f.rel === u.file)!, rec);
       ids.set(u.file, id);
       rec.uploaded.push({ file: u.file, id });
       run.log(`${where}: uploaded ${u.file}`);
@@ -203,6 +205,7 @@ async function applySet(c: AscClient, s: AppleSet, rec: AppliedSet, run: Run): P
     await waitProcessed(c, setId, rec.uploaded.map((u) => u.id), run);
     const wanted = p.order.map((file) => ({ file, id: ids.get(file)!, checksum: md5Of(file) }));
     await c.request("PATCH", `/v1/appScreenshotSets/${setId}/relationships/appScreenshots`, { data: wanted.map((x) => ({ type: "appScreenshots", id: x.id })) });
+    rec.changedStore = true;
     // Read back what App Store Connect now holds.
     const after = (await c.all(`/v1/appScreenshotSets/${setId}/appScreenshots?limit=200`)).map(shotOf);
     const same = after.length === wanted.length && after.every((a, i) => a.id === wanted[i].id && a.checksum === wanted[i].checksum && a.state === "COMPLETE");
@@ -218,12 +221,14 @@ async function applySet(c: AscClient, s: AppleSet, rec: AppliedSet, run: Run): P
 
 // Reserve, upload the parts, then commit with the MD5 checksum. A reservation that cannot be finished is deleted, so it
 // does not stay in the set as an unfinished screenshot.
-async function uploadShot(c: AscClient, setId: string, f: LocalFile): Promise<string> {
+async function uploadShot(c: AscClient, setId: string, f: LocalFile, rec: AppliedSet): Promise<string> {
   const bytes = fs.readFileSync(f.file);
   if (md5(bytes) !== f.md5) throw new Error(`${f.rel} changed after the plan was made; run the plan again`);
   const shot = (await c.request("POST", "/v1/appScreenshots", {
     data: { type: "appScreenshots", attributes: { fileName: path.basename(f.file), fileSize: bytes.length }, relationships: { appScreenshotSet: { data: { type: "appScreenshotSets", id: setId } } } },
   })).data as Resource;
+  // Set from here on, so a reservation that cannot be deleted again still counts as a change to the store.
+  rec.changedStore = true;
   try {
     await sendParts(c, shot, f, bytes);
   } catch (e) {

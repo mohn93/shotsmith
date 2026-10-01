@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { AppleDeps } from "../src/upload/apple.js";
 import { type UploadPlan, type UploadReport, planPath, readPlan, reportPath } from "../src/upload/plan.js";
 import type { PlayDeps } from "../src/upload/play.js";
+import { localSets } from "../src/upload/local.js";
 import { runApple, runPlay } from "../src/upload/run.js";
 import { FakeAsc } from "./upload/fake-asc.js";
 import { FakePlay } from "./upload/fake-play.js";
@@ -61,6 +62,34 @@ describe("runApple", () => {
     expect(out.lines.findIndex((l) => l === "Nothing was changed in App Store Connect.")).toBe(out.lines.findIndex((l) => l.startsWith("Upload failed:")) - 1);
   });
 
+  it("does not say nothing was changed when a new set and an unfinished reservation were left behind", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakeAsc();
+    await runApple(cfg, {}, apple(fake));
+    fake.uploadHost = "https://uploads.example.com";
+    fake.failDelete = true;
+    const out = await runApple(cfg, { apply: true }, apple(fake));
+    expect(out).toMatchObject({ ok: false, exitCode: 2 });
+    const text = out.lines.join("\n");
+    expect(text).not.toContain("Nothing was changed");
+    expect(out.lines.some((l) => l.startsWith("App Store Connect was partly changed"))).toBe(true);
+    expect((out.json.report as UploadReport).sets[0]).toMatchObject({ changedStore: true, deleted: [], uploaded: [] });
+  });
+
+  it("says the store was partly changed when the read-back after a reorder fails", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakeAsc();
+    const exported = (await localSets(cfg, "apple")).sets[0].files;
+    fake.seed("loc-en", "APP_IPHONE_67", [{ checksum: exported[1].md5 }, { checksum: exported[0].md5 }]);
+    await runApple(cfg, {}, apple(fake));
+    fake.ignoreReorder = true;
+    const out = await runApple(cfg, { apply: true }, apple(fake));
+    expect(out).toMatchObject({ ok: false, exitCode: 2 });
+    expect(out.lines.join("\n")).not.toContain("Nothing was changed");
+    expect(out.lines.some((l) => l.startsWith("App Store Connect was partly changed"))).toBe(true);
+    expect((out.json.report as UploadReport).sets[0]).toMatchObject({ status: "failed", changedStore: true, deleted: [], uploaded: [] });
+  });
+
   it("keeps the saved plan when --apply finds export problems", async () => {
     const cfg = await uploadWorkspace();
     const fake = new FakeAsc();
@@ -87,22 +116,30 @@ describe("runApple", () => {
     await expect(runPlay(cfg, { apply: true }, never)).rejects.toThrow(/No saved plan at export\/upload-plan-play\.json/);
   });
 
-  it("removes the earlier report when --apply starts, so a refused apply leaves none", async () => {
+  it("replaces the earlier report with a placeholder when --apply starts, so a refused apply leaves no stale report", async () => {
     const cfg = await uploadWorkspace();
     const fake = new FakeAsc();
+    const placeholder = (store: "apple" | "play", app: string) => {
+      const r = JSON.parse(fs.readFileSync(reportPath(cfg, store), "utf8")) as UploadReport;
+      expect(r).toMatchObject({ store, app, version: null, digest: "", editId: null, editExpiresAt: null, ok: false, error: "apply did not finish", sets: [] });
+      expect(r.startedAt).toBe(r.finishedAt);
+      expect(Number.isNaN(Date.parse(r.startedAt))).toBe(false);
+    };
     await runApple(cfg, {}, apple(fake));
     await runApple(cfg, { apply: true }, apple(fake));
-    expect(fs.existsSync(reportPath(cfg, "apple"))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(reportPath(cfg, "apple"), "utf8")).ok).toBe(true);
     await paint(cfg, "en", "iphone-6.9", "01-a", 1);
     await expect(runApple(cfg, { apply: true }, apple(fake))).rejects.toThrow(/differs from the saved plan/);
-    expect(fs.existsSync(reportPath(cfg, "apple"))).toBe(false);
+    placeholder("apple", "com.example.demo");
     const p = new FakePlay();
     await runPlay(cfg, {}, play(p));
     await runPlay(cfg, { apply: true }, play(p));
-    expect(fs.existsSync(reportPath(cfg, "play"))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(reportPath(cfg, "play"), "utf8")).editId).toBe("1002");
     await paint(cfg, "en", "android-phone", "01-a", 1);
     await expect(runPlay(cfg, { apply: true }, play(p))).rejects.toThrow(/differs from the saved plan/);
-    expect(fs.existsSync(reportPath(cfg, "play"))).toBe(false);
+    placeholder("play", "com.example.demo");
+    // The staged edit's id is gone from the report, so it cannot be committed from it.
+    await expect(runPlay(cfg, { commit: "1002" }, never)).rejects.toThrow(/staged no edit.*delete export\/upload-report-play\.json first/);
   });
 
   it("says the store already matches when every set is unchanged", async () => {
