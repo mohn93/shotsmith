@@ -4,7 +4,7 @@ Building blocks from the DNS Kit set, one folder per style in `styles.md`. They 
 
 ## Complete examples
 
-`examples/` holds three complete workspaces built with the kit: `savory`, `elsewhere` and `daily-arc`. Each has `shotsmith.config.json`, `claims.json` (English and German), `brief.md` with what was declined, `store-copy.md` and `pages/`. Captures and fonts are not copied here; the pages show how the kit is used, and are the best starting point for a new set.
+`examples/` holds three complete workspaces built with the kit: `savory`, `elsewhere` and `daily-arc`. Each has `shotsmith.config.json`, `claims.json` (English and German), `brief.md` with what was declined, `store-copy.md` and `pages/`. Captures and fonts are not copied here; the pages show how the kit is used, and are the best starting point for a new set. Keep the `package.json` that `init` wrote: each example's `package.json` and README "Build" section run this repository's CLI and are for the shotsmith repo only.
 
 ## What the kit replaces
 

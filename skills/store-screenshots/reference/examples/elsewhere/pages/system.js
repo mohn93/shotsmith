@@ -347,7 +347,7 @@ export function wavePaths(G, x0, x1) {
 }
 export function waves(s, slice, { fadeTo, opacity = 0.55 }) {
   const G = geo(s), off = slice * s.W, x0 = G.PM.x + G.PM.r + 14;
-  // The fade is a CSS mask on the layer: an SVG mask="url(#id)" reads as a mask image the kit tries to load.
+  // The fade is a CSS gradient mask on the layer, which needs no <mask> element inside the SVG.
   const fade = `linear-gradient(to right, #000 0, transparent ${fadeTo - off}px)`;
   box(s.root, `left:0;top:0;width:${s.W}px;height:${s.H}px;z-index:30;opacity:${opacity};-webkit-mask-image:${fade};mask-image:${fade}`,
     `<svg width="${s.W}" height="${s.H}" viewBox="${off} 0 ${s.W} ${s.H}" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="${C.gold}">${wavePaths(G, x0, fadeTo)}</svg>`);

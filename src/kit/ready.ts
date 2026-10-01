@@ -2,11 +2,18 @@ import { type SidecarFont, domHash, pageText } from "../shared/sidecar.js";
 import { collectEvidence, cssUrls } from "./evidence.js";
 import { ctx, fail, state } from "./runtime.js";
 
+// url(#id) points at an element in this page (an SVG <mask>, <clipPath>, gradient), not an image to load.
+const sameDocument = (u: string): boolean => {
+  if (u.startsWith("#")) return true;
+  try { const x = new URL(u, location.href); return x.hash !== "" && x.href.slice(0, -x.hash.length) === location.href.split("#")[0]; }
+  catch { return false; }
+};
+
 function cssImageUrls(): string[] {
   const urls = new Set<string>();
   for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
     const cs = getComputedStyle(el);
-    for (const p of ["background-image", "mask-image", "-webkit-mask-image"]) for (const u of cssUrls(cs.getPropertyValue(p))) urls.add(u);
+    for (const p of ["background-image", "mask-image", "-webkit-mask-image"]) for (const u of cssUrls(cs.getPropertyValue(p))) if (!sameDocument(u)) urls.add(u);
   }
   return [...urls];
 }

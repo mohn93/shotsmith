@@ -36,22 +36,22 @@ describe("capture()", () => {
 });
 
 describe("file names with URL characters", () => {
-  it("loads captures and fonts whose names contain spaces, # and ?", async () => {
+  it("loads captures and fonts whose names contain spaces, #, ? and %", async () => {
     const dir = tmpWorkspace("kit");
     await makeCaptures(dir);
-    fs.renameSync(path.join(dir, "inputs/iphone/en/home.png"), path.join(dir, "inputs/iphone/en/my home#1?.png"));
+    fs.renameSync(path.join(dir, "inputs/iphone/en/home.png"), path.join(dir, "inputs/iphone/en/my home#1?%.png"));
     fs.copyFileSync(path.join(dir, "fonts/Inter-Bold.ttf"), path.join(dir, "fonts/Inter Bold #2.ttf"));
     const cfgFile = path.join(dir, "shotsmith.config.json");
     const cfg = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
     cfg.fonts.display = { apple: "fonts/Inter Bold #2.ttf", play: "fonts/Inter Bold #2.ttf" };
     fs.writeFileSync(cfgFile, JSON.stringify(cfg));
     const src = fs.readFileSync(`${dir}/pages/device.html`, "utf8");
-    fs.writeFileSync(`${dir}/pages/device-odd.html`, src.replace('q.get("c") ?? "home"', '"my home#1?"'));
-    fs.writeFileSync(`${dir}/pages/capture-odd.html`, fs.readFileSync(`${dir}/pages/capture.html`, "utf8").replace('q.get("c") ?? "home"', '"my home#1?"'));
+    fs.writeFileSync(`${dir}/pages/device-odd.html`, src.replace('q.get("c") ?? "home"', '"my home#1?%"'));
+    fs.writeFileSync(`${dir}/pages/capture-odd.html`, fs.readFileSync(`${dir}/pages/capture.html`, "utf8").replace('q.get("c") ?? "home"', '"my home#1?%"'));
 
     const d = await render(dir, "device-odd", "iphone-6.9");
-    expect(d.sidecar.captures).toEqual(["/inputs/iphone/en/my home#1?.png"]);
+    expect(d.sidecar.captures).toEqual(["/inputs/iphone/en/my home#1?%.png"]);
     expect(d.sidecar.fonts.some((f) => f.url === "/fonts/Inter Bold #2.ttf")).toBe(true);
-    expect((await render(dir, "capture-odd", "iphone-6.9")).sidecar.captures).toEqual(["/inputs/iphone/en/my home#1?.png"]);
+    expect((await render(dir, "capture-odd", "iphone-6.9")).sidecar.captures).toEqual(["/inputs/iphone/en/my home#1?%.png"]);
   });
 });

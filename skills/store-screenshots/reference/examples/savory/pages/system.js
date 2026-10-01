@@ -168,7 +168,6 @@ export async function shapeLift(st, card, { region, inset = 2, shapes, shadow })
     ? `<rect x="${sh.rect[0] - ox}" y="${sh.rect[1] - oy}" width="${sh.rect[2] - sh.rect[0]}" height="${sh.rect[3] - sh.rect[1]}" rx="${sh.r}" fill="#fff"/>`
     : `<circle cx="${sh.circle[0] - ox}" cy="${sh.circle[1] - oy}" r="${sh.circle[2]}" fill="#fff"/>`).join("");
   const data = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${sv}</svg>`)}`;
-  const probe = new Image(); probe.src = data; await probe.decode();   // ready() does not wait for CSS masks
   const url = `url("${data}")`;
   Object.assign(card.style, { borderRadius: "0", boxShadow: "none", webkitMaskImage: url, maskImage: url, webkitMaskSize: "100% 100%", maskSize: "100% 100%" });
   // The mask would clip a shadow on the card itself, so the shadow goes on a wrapper.

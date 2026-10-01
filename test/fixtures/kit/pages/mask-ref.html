@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import { stage, ready } from "shotsmith/kit";
+const s = await stage();
+const holder = document.createElement("div");
+holder.style.cssText = "position:absolute;left:80px;top:300px;width:600px;height:400px";
+holder.innerHTML = `<svg width="600" height="200" xmlns="http://www.w3.org/2000/svg">
+  <mask id="m"><rect width="600" height="200" fill="#fff"/><circle cx="300" cy="100" r="60" fill="#000"/></mask>
+  <rect width="600" height="200" fill="#c33" mask="url(#m)"/>
+</svg>
+<div style="width:600px;height:200px;background:#33c;mask-image:url(#m);-webkit-mask-image:url(#m)"></div>`;
+s.root.appendChild(holder);
+await ready();
+</script></body></html>

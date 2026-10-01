@@ -22,6 +22,8 @@ describe("skill command", () => {
     expect(fs.existsSync(path.join(dest, "reference/README.md"))).toBe(true);
 
     fs.writeFileSync(path.join(dest, "stale.txt"), "x");
+    fs.mkdirSync(path.join(home, ".store-screenshots-abc123"));
+    fs.writeFileSync(path.join(home, ".store-screenshots-abc123/SKILL.md"), "left by a crashed install");
     const again = run(["skill", "install", "--dir", home, "--json"]);
     expect(again.status).toBe(2);
     expect(JSON.parse(again.stdout).error.message).toMatch(/already exists; pass --force to replace it/);

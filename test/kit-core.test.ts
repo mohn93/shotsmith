@@ -95,4 +95,21 @@ describe("kit core", () => {
       await ready();</script></body>`);
     await expect(render(ws, "img", "android-phone", "en")).rejects.toThrow(/Image failed to load: \/missing\.png/);
   });
+
+  it("does not treat a same-document url(#id) mask as an image to load", async () => {
+    const { sidecar } = await render(tmpWorkspace("kit"), "mask-ref", "android-phone", "en");
+    expect(sidecar.warnings).toEqual([]);
+  });
+
+  it("still fails the render when a CSS mask image does not load", async () => {
+    const ws = tmpWorkspace("kit");
+    fs.writeFileSync(`${ws}/pages/mask-missing.html`, `<!doctype html><body><script type="module">
+      import { stage, ready } from "shotsmith/kit";
+      const s = await stage();
+      const d = document.createElement("div");
+      d.style.cssText = "width:100px;height:100px;background:#000;mask-image:url(/missing.png)";
+      s.root.appendChild(d);
+      await ready();</script></body>`);
+    await expect(render(ws, "mask-missing", "android-phone", "en")).rejects.toThrow(/Image failed to load: \/missing\.png/);
+  });
 });

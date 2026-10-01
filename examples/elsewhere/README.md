@@ -41,4 +41,4 @@ node dist/cli.js strip iphone-6.9 -C examples/elsewhere
 node dist/cli.js thumbs iphone-6.9 -C examples/elsewhere --from export --width 300
 ```
 
-`build-examples.mjs` runs `npm ci` here first (the pages need `three`). Or from this folder, after `npm run build` in the repository root and `npm install` here: `npm run build`.
+`build-examples.mjs` runs `npm ci` here first when this folder has a lockfile and no `node_modules` (the pages need `three`). Or from this folder, after `npm run build` in the repository root and `npm install` here: `npm run build`.
