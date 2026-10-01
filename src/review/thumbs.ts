@@ -13,7 +13,7 @@ export async function thumbs(cfg: ResolvedConfig, o: { target: string; locale?: 
   if (!files.length) throw new Error(`Nothing rendered for ${locale}/${o.target}; run shotsmith build`);
   const tiles = await Promise.all(files.map((f) => sharp(f).resize({ width }).toBuffer({ resolveWithObject: true })));
   const h = tiles[0].info.height;
-  const out = path.join(cfg.root, "review", `${locale}-${o.target}-${width}.png`);
+  const out = path.join(cfg.root, "review", `${locale}-${o.target}-${width}${o.from === "export" ? "-export" : ""}.png`);
   refuseLinked(cfg.root, out);
   fs.mkdirSync(path.dirname(out), { recursive: true });
   await sharp({ create: { width: gap + tiles.length * (width + gap), height: h + 2 * gap, channels: 3, background: "#ffffff" } })

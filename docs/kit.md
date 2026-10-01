@@ -56,6 +56,7 @@ Two more rules the checks enforce:
 
 - A page must not change its text after `ready()`. The renderer compares the page text before and after the screenshot and reports `render.changedAfterReady`.
 - Fonts for Google Play targets must not be Apple's SF or New York, from any source: config, a workspace font file, a page `@font-face`, or a system fallback. Name a Play font in `fonts.<role>.play` and a non-Apple `fallback`. A page that uses a font the configured files do not cover gets `text.coverage`.
+- A configured font file that cannot be read is `font.unreadable`, an error: its glyph coverage cannot be checked.
 
 ## headline
 
@@ -173,6 +174,7 @@ Needs `three` (0.160 or newer) in the workspace's `node_modules` (`npm install t
 ## Output and build
 
 - `shotsmith render` writes `out/<locale>/<target>/<page>.png` and a `.sidecar.json` next to it. With `-o` inside the workspace the sidecar goes next to that file; with `-o` outside the workspace only the image is written (the output says the sidecar was skipped).
+- `shotsmith thumbs --from export` writes `review/<locale>-<target>-<width>-export.png`, so it never overwrites the review of `out/`.
 - `out/` and `review/` must be real folders: a link anywhere on the way makes `render`, `build`, `thumbs` and `strip` stop with exit 2 instead of writing or deleting through it.
 - `shotsmith build` renders everything, writes JPEGs to `export/<locale>/<target>/<page>.jpg` (exact target size, opaque RGB, baseline JPEG, quality 92, chroma 4:4:4), contact sheets and `REPORT.md`, and runs every check.
 - The export folder (`output` in the config) must be a real folder inside the workspace. Links are refused (`store.linked`), and Shotsmith never writes or deletes through one.
