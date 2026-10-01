@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { BUILT_IN_TARGETS } from "../src/config/targets.js";
 import { localSets, slotsFor } from "../src/upload/local.js";
 import { type PlannedSet, describePlan, describeReport, makePlan, planPath, readPlan, samePlan, writeJson } from "../src/upload/plan.js";
@@ -102,6 +102,42 @@ describe("plans", () => {
     expect(() => samePlan(cfg, saved, plan)).not.toThrow();
     expect(() => samePlan(cfg, saved, makePlan({ ...base, sets: [] }))).toThrow(/differs from the saved plan.*Nothing was changed\. Run shotsmith upload apple without --apply again, with the same options, and show the user the new plan/);
     expect(readPlan(cfg, "play")).toBeNull();
+  });
+
+  it("reads only a saved plan that has every field", async () => {
+    const cfg = await uploadWorkspace({ export: false });
+    const plan = makePlan({ ...base, sets: [set()] });
+    const save = (p: unknown) => { fs.mkdirSync(path.join(cfg.root, "export"), { recursive: true }); fs.writeFileSync(planPath(cfg, "apple"), JSON.stringify(p)); };
+    save(plan);
+    expect(readPlan(cfg, "apple")).toEqual(plan);
+    save({ ...plan, version: null });
+    expect(readPlan(cfg, "apple")?.version).toBeNull();
+    const { sets: _sets, ...noSets } = plan;
+    for (const bad of [noSets, { ...plan, problems: "x" }, { ...plan, app: 1 }, { ...plan, createdAt: undefined }, { ...plan, version: 1 }, { ...plan, store: "play" }]) {
+      save(bad);
+      expect(readPlan(cfg, "apple")).toBeNull();
+    }
+  });
+
+  it("writes through a temp file in the same folder and leaves none behind", async () => {
+    const cfg = await uploadWorkspace({ export: false });
+    const file = planPath(cfg, "apple");
+    const rename = vi.spyOn(fs, "renameSync");
+    try {
+      writeJson(cfg, file, { a: 1 });
+      expect(rename).toHaveBeenCalledTimes(1);
+      const [from, to] = rename.mock.calls[0] as [string, string];
+      expect(to).toBe(file);
+      expect(path.dirname(from)).toBe(path.dirname(file));
+      expect(from).not.toBe(file);
+      expect(fs.readdirSync(path.dirname(file))).toEqual(["upload-plan-apple.json"]);
+      rename.mockImplementation(() => { throw new Error("disk full"); });
+      expect(() => writeJson(cfg, file, { a: 2 })).toThrow(/disk full/);
+    } finally {
+      rename.mockRestore();
+    }
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ a: 1 });
+    expect(fs.readdirSync(path.dirname(file))).toEqual(["upload-plan-apple.json"]);
   });
 
   it("does not write through a linked output folder", async () => {

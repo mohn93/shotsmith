@@ -1,12 +1,13 @@
 import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AppleDeps } from "../src/upload/apple.js";
-import { type UploadPlan, type UploadReport, readPlan, reportPath } from "../src/upload/plan.js";
+import { type UploadPlan, type UploadReport, planPath, readPlan, reportPath } from "../src/upload/plan.js";
 import type { PlayDeps } from "../src/upload/play.js";
 import { runApple, runPlay } from "../src/upload/run.js";
 import { FakeAsc } from "./upload/fake-asc.js";
 import { FakePlay } from "./upload/fake-play.js";
-import { uploadWorkspace } from "./upload/workspace.js";
+import { paint, uploadWorkspace } from "./upload/workspace.js";
 
 let clock = 0;
 const apple = (fake: FakeAsc) => (): AppleDeps => ({ transport: fake.transport, token: () => "token", now: () => clock, sleep: async (ms) => { clock += ms; } });
@@ -47,6 +48,61 @@ describe("runApple", () => {
     expect(partly).toBeGreaterThan(out.lines.findIndex((l) => /failed after deleting/.test(l)));
     expect(partly).toBe(out.lines.findIndex((l) => l.startsWith("Upload failed:")) - 1);
     expect((JSON.parse(fs.readFileSync(reportPath(cfg, "apple"), "utf8")) as UploadReport).ok).toBe(false);
+  });
+
+  it("says nothing was changed when applying fails before anything was deleted or uploaded", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakeAsc();
+    await runApple(cfg, {}, apple(fake));
+    const refuse = (): AppleDeps => ({ ...apple(fake)(), transport: async (req) => (req.method === "POST" && req.url.endsWith("/v1/appScreenshotSets") ? { status: 500, text: "{}" } : fake.transport(req)) });
+    const out = await runApple(cfg, { apply: true }, refuse);
+    expect(out).toMatchObject({ ok: false, exitCode: 2 });
+    expect(out.lines.some((l) => /partly changed/.test(l))).toBe(false);
+    expect(out.lines.findIndex((l) => l === "Nothing was changed in App Store Connect.")).toBe(out.lines.findIndex((l) => l.startsWith("Upload failed:")) - 1);
+  });
+
+  it("keeps the saved plan when --apply finds export problems", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakeAsc();
+    await runApple(cfg, {}, apple(fake));
+    const before = fs.readFileSync(planPath(cfg, "apple"), "utf8");
+    fs.rmSync(path.join(cfg.root, "export/de/iphone-6.9/02-b.jpg"));
+    const out = await runApple(cfg, { apply: true }, never);
+    expect(out).toMatchObject({ ok: false, exitCode: 1 });
+    expect((out.json.plan as UploadPlan).problems[0]).toMatch(/store\.missing/);
+    expect(out.json.planFile).toBeUndefined();
+    expect(out.lines.join("\n")).not.toMatch(/Plan written/);
+    expect(fs.readFileSync(planPath(cfg, "apple"), "utf8")).toBe(before);
+    const pcfg = await uploadWorkspace();
+    await runPlay(pcfg, {}, play(new FakePlay()));
+    const playBefore = fs.readFileSync(planPath(pcfg, "play"), "utf8");
+    fs.rmSync(path.join(pcfg.root, "export/de/android-phone/02-b.jpg"));
+    expect(await runPlay(pcfg, { apply: true }, never)).toMatchObject({ ok: false, exitCode: 1 });
+    expect(fs.readFileSync(planPath(pcfg, "play"), "utf8")).toBe(playBefore);
+  });
+
+  it("looks for the saved plan before connecting", async () => {
+    const cfg = await uploadWorkspace();
+    await expect(runApple(cfg, { apply: true }, never)).rejects.toThrow(/No saved plan at export\/upload-plan-apple\.json\. Run shotsmith upload apple without --apply/);
+    await expect(runPlay(cfg, { apply: true }, never)).rejects.toThrow(/No saved plan at export\/upload-plan-play\.json/);
+  });
+
+  it("removes the earlier report when --apply starts, so a refused apply leaves none", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakeAsc();
+    await runApple(cfg, {}, apple(fake));
+    await runApple(cfg, { apply: true }, apple(fake));
+    expect(fs.existsSync(reportPath(cfg, "apple"))).toBe(true);
+    await paint(cfg, "en", "iphone-6.9", "01-a", 1);
+    await expect(runApple(cfg, { apply: true }, apple(fake))).rejects.toThrow(/differs from the saved plan/);
+    expect(fs.existsSync(reportPath(cfg, "apple"))).toBe(false);
+    const p = new FakePlay();
+    await runPlay(cfg, {}, play(p));
+    await runPlay(cfg, { apply: true }, play(p));
+    expect(fs.existsSync(reportPath(cfg, "play"))).toBe(true);
+    await paint(cfg, "en", "android-phone", "01-a", 1);
+    await expect(runPlay(cfg, { apply: true }, play(p))).rejects.toThrow(/differs from the saved plan/);
+    expect(fs.existsSync(reportPath(cfg, "play"))).toBe(false);
   });
 
   it("says the store already matches when every set is unchanged", async () => {
@@ -101,5 +157,6 @@ describe("runPlay", () => {
     const cfg = await uploadWorkspace();
     await expect(runPlay(cfg, { apply: true, commit: "1" }, never)).rejects.toThrow(/either --apply or --commit/);
     await expect(runPlay(cfg, { commit: "a b" }, never)).rejects.toThrow(/not a Play edit id/);
+    await expect(runPlay(cfg, { commit: "1", locales: ["en"] }, never)).rejects.toThrow(/-l does not apply to --commit/);
   });
 });

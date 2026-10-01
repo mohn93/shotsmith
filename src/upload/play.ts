@@ -1,9 +1,9 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import type { ResolvedConfig } from "../config/schema.js";
 import { type Method, StoreError, type Transport, parseBody } from "./http.js";
 import type { LocalSet } from "./local.js";
 import { type AppliedSet, type PlannedSet, type UploadPlan, type UploadReport, makePlan, samePlan } from "./plan.js";
+import { sha256 } from "./util.js";
 
 export const PLAY_API = "https://androidpublisher.googleapis.com";
 export interface PlayDeps { transport: Transport; token: () => Promise<string>; log?: (line: string) => void; now?: () => number }
@@ -103,8 +103,6 @@ export async function planPlay(cfg: ResolvedConfig, local: LocalSet[], deps: Pla
     await c.deleteEdit(edit).catch(() => {});
   }
 }
-
-const sha256 = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
 
 export function checkEditId(id: string): void {
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) throw new Error(`"${id}" is not a Play edit id; use the id that shotsmith upload play --apply printed`);

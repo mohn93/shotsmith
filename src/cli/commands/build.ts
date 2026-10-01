@@ -1,9 +1,7 @@
 import type { Command } from "commander";
 import { build } from "../../build/build.js";
 import { loadConfig } from "../../config/schema.js";
-import { globals, printFindings } from "../output.js";
-
-const list = (v: string, prev: string[] = []) => [...prev, ...v.split(",")];
+import { globals, list, printFindings } from "../output.js";
 
 export function registerBuild(program: Command) {
   program.command("build").description("render every page for every target and locale, export, and check")

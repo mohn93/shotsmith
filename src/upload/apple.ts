@@ -1,10 +1,10 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { ResolvedConfig } from "../config/schema.js";
 import { type HttpRequest, type Method, StoreError, type Transport, parseBody } from "./http.js";
 import type { LocalFile, LocalSet } from "./local.js";
 import { type AppliedSet, type PlannedSet, type RemoveReason, type UploadPlan, type UploadReport, makePlan, samePlan } from "./plan.js";
+import { md5 } from "./util.js";
 
 export const ASC = "https://api.appstoreconnect.apple.com";
 // Version states in which screenshots can still change.
@@ -142,7 +142,6 @@ export async function planApple(cfg: ResolvedConfig, local: LocalSet[], o: { ver
 export const PROCESSING_LIMIT_MS = 5 * 60_000;
 const POLL_START_MS = 2000;
 const POLL_MAX_MS = 10_000;
-const md5 = (b: Buffer) => crypto.createHash("md5").update(b).digest("hex");
 interface Run { log: (line: string) => void; now: () => number; sleep: (ms: number) => Promise<void> }
 
 // Recomputes the plan and applies it only when it matches the saved plan the user reviewed. Never submits for review.
