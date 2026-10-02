@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { type Page, errors } from "playwright";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { chromiumArgs } from "../src/render/browser.js";
 import { outPath, renderFailure, renderPage, renderVideo, waitForPage } from "../src/render/render.js";
 import { sidecarPath } from "../src/shared/sidecar.js";
@@ -313,24 +313,35 @@ describe("renderer", () => {
 // waitForPage against a stand-in page that never answers an evaluate, as a page stuck in a loop does not.
 describe("stuck page", () => {
   const never = () => new Promise<never>(() => {});
+  const TIMEOUT = 300;
+  const GRACE = 2000;
+  afterEach(() => { vi.useRealTimers(); });
+
+  // Runs waitForPage on fake timers and reports whether it had failed just before and exactly at timeout + grace.
   const stuckFailure = async (waitForFunction: () => Promise<unknown>) => {
-    const r = { timeoutMs: 300 };
+    vi.useFakeTimers();
+    const r = { timeoutMs: TIMEOUT };
     const tab = { waitForFunction, evaluate: never } as unknown as Page;
-    const started = Date.now();
-    const e = await waitForPage(r, { tab, pageError: never() }, () => true, "set window.__ready", "p (t, en)", []).then(() => null, (x: unknown) => x);
-    return { message: (renderFailure(r, e, "p (t, en)", []) as Error).message, ms: Date.now() - started };
+    let failure: unknown = null;
+    let settled = false;
+    const run = waitForPage(r, { tab, pageError: never() }, () => true, "set window.__ready", "p (t, en)", []).then(() => null, (x: unknown) => x).then((x) => { failure = x; settled = true; });
+    await vi.advanceTimersByTimeAsync(TIMEOUT + GRACE - 1);
+    const settledBefore = settled;
+    await vi.advanceTimersByTimeAsync(1);
+    await run;
+    return { message: (renderFailure(r, failure, "p (t, en)", []) as Error).message, settledBefore, settledAt: settled };
   };
 
   it("reports the renderer timeout whichever step finds the page stuck", async () => {
     // The loop started after Playwright's poller was in the page: Playwright's timeout waits on the page and never settles.
     const late = await stuckFailure(never);
     // The loop started before the poller was in the page: Playwright's timeout fires, then the page does not answer.
-    const early = await stuckFailure(() => new Promise((_, rej) => setTimeout(() => rej(new errors.TimeoutError("Timeout 300ms exceeded")), 300)));
+    const early = await stuckFailure(() => new Promise((_, rej) => setTimeout(() => rej(new errors.TimeoutError(`Timeout ${TIMEOUT}ms exceeded`)), TIMEOUT)));
     for (const f of [late, early]) {
       expect(f.message).toBe("p (t, en): page stopped responding (no answer within 0.3s)");
-      // Both fail 2 s (the grace) after the timeout, not after a second full timeout.
-      expect(f.ms).toBeGreaterThanOrEqual(2290);
-      expect(f.ms).toBeLessThan(3500);
+      // Both fail exactly the grace after the timeout (not before it, and not after a second full timeout).
+      expect(f.settledBefore).toBe(false);
+      expect(f.settledAt).toBe(true);
     }
   });
 
