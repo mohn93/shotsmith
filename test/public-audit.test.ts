@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -44,5 +44,20 @@ describe("findSecrets", () => {
     expect(findSecrets(`k=AIza${"a".repeat(35)}`)).toEqual(["Google API key"]);
     expect(findSecrets(`x=${"xox"}b-1234567890-abc`)).toEqual(["Slack token"]);
     expect(findSecrets("generateKeyPairSync(\"ec\") and a private_key field name")).toEqual([]);
+  });
+});
+
+describe("audit-history CLI", () => {
+  it("fails with exit 2 and no clean message when git is unavailable", () => {
+    const tmpDir = path.join(ROOT, "test", ".tmp", "nonexistent-git-dir");
+    const result = spawnSync("node", ["scripts/audit-history.mjs"], { cwd: ROOT, env: { ...process.env, GIT_DIR: tmpDir }, encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stdout).not.toContain("No secrets found");
+  });
+
+  it("exits 0 with clean message when git succeeds and no secrets found", () => {
+    const result = spawnSync("node", ["scripts/audit-history.mjs"], { cwd: ROOT, encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("No secrets found in history");
   });
 });
