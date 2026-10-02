@@ -1,32 +1,25 @@
 # Shotsmith
 
-App Store and Google Play screenshots, written as code by an AI agent and checked against store rules. Pre-release.
+App Store and Google Play screenshots, written as code by an AI agent and checked against store rules.
 
 ## Install
 
-Shotsmith is not on npm yet. Until it is, build it from source and link it:
+Needs Node 20 or newer, on macOS or Linux.
 
 ```sh
-git clone https://github.com/mohn93/shotsmith && cd shotsmith
-npm ci && npm run build && npm link
-npx playwright install chromium
-```
-
-Then create a workspace with the linked command and install shotsmith into it from the checkout. `init`'s own install would fetch `shotsmith@^0.1.0` from npm, which does not exist yet, so skip it:
-
-```sh
-shotsmith init screenshots --app "My App" --no-install
+npx shotsmith@0.1.0 init screenshots --app "My App"
 cd screenshots
-npm install /path/to/shotsmith    # the checkout; also installs three
+npx playwright install chromium   # once per machine; on Linux: npx playwright install --with-deps chromium
 npx shotsmith build
 ```
 
-Until the package is published, use `shotsmith init` (and `shotsmith <command>` in general) where the skill says `npx shotsmith@0.1.0 init`, and install the checkout as above. Inside the workspace, `npx shotsmith` works as the skill describes.
+`init` creates the workspace and installs shotsmith (`^<version>`, the version you ran) into it. Video drafts (`render --video`) also need `ffmpeg` on the PATH.
 
 The agent skill (`skills/store-screenshots`) drives the whole flow: taste, claims, brief, pages, review, build.
 
 - Claude Code: `/plugin marketplace add mohn93/shotsmith`, then `/plugin install shotsmith@shotsmith`.
 - Other agents: `shotsmith skill install` copies it to `~/.claude/skills/store-screenshots`; `--dir <folder>` installs it elsewhere, and `shotsmith skill path` prints where the bundled copy is.
+- claude.ai: upload `store-screenshots-<version>.zip` from the [GitHub release](https://github.com/mohn93/shotsmith/releases) as a skill. Where it cannot run commands, the skill writes the workspace for you to build locally.
 
 ## Examples
 
@@ -82,3 +75,18 @@ Pages are plain HTML that import `shotsmith/kit` (and optionally `shotsmith/kit/
 | 2 | Usage or runtime failure: bad arguments, missing config, a crash, a failed or refused upload |
 
 With `--json` every command prints exactly one JSON object to stdout and nothing else. It always has a boolean `ok`: `ok` is `true` for exit code 0 and `false` otherwise. Commands that check (`check`, `claims`, `build`) add `errors` and `warnings` arrays of `{ rule, severity, message, locale?, target?, page? }`. A runtime failure prints `{ "ok": false, "error": { "message": "..." } }` and exits 2. `upload` adds `plan` and `planFile`, `report` and `reportFile`, or `committed`; under `--apply` with export problems there is a `plan` but no `planFile`, because the saved plan is kept; a failed upload apply carries `error` plus `report` and `reportFile`.
+
+## Development
+
+```sh
+npm ci && npm run build
+npx playwright install chromium
+npm test            # builds first; kit baselines live in test/baselines/<darwin|linux>
+npm run examples    # builds the three examples; 0 errors and 0 warnings expected
+```
+
+CI runs the same on Ubuntu and macOS. A missing kit baseline is written and its test fails; on CI the new images are kept as a run artifact so they can be reviewed and committed.
+
+## Releasing
+
+See [RELEASE.md](RELEASE.md).

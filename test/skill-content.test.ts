@@ -18,7 +18,9 @@ describe("skill content", () => {
 
   it("pins this package's version wherever it names shotsmith@", () => {
     const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
-    const pins = DOCS.map(read).join("\n").match(/shotsmith@[\w.-]+/g) ?? [];
+    const docsText = DOCS.map(read).join("\n");
+    const readmeText = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+    const pins = (docsText + "\n" + readmeText).match(/shotsmith@\d+[\w.-]*/g) ?? [];
     expect(pins.length).toBeGreaterThan(0);
     expect([...new Set(pins)]).toEqual([`shotsmith@${version}`]);
   });
@@ -87,5 +89,20 @@ describe("skill content", () => {
     expect(skill).toMatch(/never ask for keys in chat/);
     expect(targets).toContain('"apple": { "bundleId" }');
     expect(targets).toContain('"play": { "packageName" }');
+  });
+
+  it("tells an agent without a shell what to hand over instead of renders", () => {
+    const skill = read("SKILL.md");
+    expect(skill).toMatch(/^## Without a shell or Node/m);
+    expect(skill).toMatch(/do not describe renders you have not seen/i);
+  });
+
+  it("documents the published install route and the release process", () => {
+    const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+    expect(readme).not.toMatch(/not on npm yet|Pre-release/i);
+    expect(readme).toMatch(/npx shotsmith@\d+\.\d+\.\d+ init/);
+    expect(readme).toContain("RELEASE.md");
+    const release = fs.readFileSync(path.join(ROOT, "RELEASE.md"), "utf8");
+    for (const s of ["Trusted Publisher", "release.yml", "check-release", "pack-skill", "three-app", "## Trial record"]) expect(release, s).toContain(s);
   });
 });

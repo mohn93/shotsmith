@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "App Store and Google Play screenshots, written as code by an AI agent and checked against store rules",
   "license": "MIT",
+  "homepage": "https://github.com/mohn93/shotsmith#readme",
+  "bugs": { "url": "https://github.com/mohn93/shotsmith/issues" },
+  "keywords": ["app-store", "google-play", "screenshots", "aso", "playwright", "agent-skill"],
   "repository": { "type": "git", "url": "git+https://github.com/mohn93/shotsmith.git" },
   "type": "module",
   "bin": { "shotsmith": "./dist/cli.js" },
@@ -13,12 +16,14 @@
   },
   "files": ["dist", "templates", "skills", "README.md", "LICENSE"],
   "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public", "provenance": true },
   "scripts": {
     "build": "tsup",
     "lint": "tsc --noEmit",
     "test": "npm run build && vitest run",
     "prepack": "npm run build",
     "examples": "npm run build && node scripts/build-examples.mjs",
+    "pack-skill": "node scripts/pack-skill.mjs",
     "sync-skill": "node scripts/sync-skill.mjs"
   },
   "dependencies": {

@@ -171,6 +171,10 @@ Render, view it at 700 px wide and in full-size crops of the details, critique l
 
 Upload only when the user asks, and only from a set whose `build` exits 0. Run `npx shotsmith upload apple` or `npx shotsmith upload play` without flags first: it changes nothing, prints what it would keep, delete and upload and the final order, and writes `export/upload-plan-<store>.json`. Show the user that plan. Run `--apply` only after they confirm it. For Google Play, `--apply` stages a validated draft edit and prints its id, and `--commit <editId>` publishes it, again only after the user confirms. A request to upload is not confirmation of the plan: show the plan and wait for an explicit yes. If credentials are missing, tell the user which environment variables or `credentials.json` fields to set; never ask for keys in chat. After a failed `--apply`, show the user the printed summary and plan again before anything else. Never submit an app for review, and never put store keys in the workspace (credentials and details: `targets.md`).
 
+## Without a shell or Node
+
+Where you cannot run `npx shotsmith` (no shell, no Node 20 or newer, no network or no Chromium, as in claude.ai), still do steps 1 to 4 with the user: taste, truth, the brief and the claims. Then write the workspace files yourself: `shotsmith.config.json`, `claims.json`, `brief.md` and the pages. Hand them over with the commands to run on a machine that has Node: `npx shotsmith@0.1.0 init <folder>`, replace its starter files with yours, add the captures under `inputs/`, then `npx shotsmith build`. Do not describe renders you have not seen, and do not say exports exist.
+
 ## Common mistakes
 
 | Mistake | Fix |
