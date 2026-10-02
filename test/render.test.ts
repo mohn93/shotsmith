@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
+import { type Page, errors } from "playwright";
 import { describe, expect, it } from "vitest";
 import { chromiumArgs } from "../src/render/browser.js";
-import { outPath, renderPage, renderVideo } from "../src/render/render.js";
+import { outPath, renderFailure, renderPage, renderVideo, waitForPage } from "../src/render/render.js";
 import { sidecarPath } from "../src/shared/sidecar.js";
 import { ROOT, pixel, tempDir, tmpWorkspace, withRenderer } from "./helpers.js";
 
@@ -113,18 +114,20 @@ describe("renderer", () => {
     const ws = tmpWorkspace("basic");
     await withRenderer(ws, async (r) => {
       const started = Date.now();
-      let loopSettled = false;
-      const loop = renderPage(r, { page: "loop", target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", "loop") })
+      let stuckSettled = 0;
+      // loop starts looping 300 ms after its script runs, normally after Playwright's ready poller is in the page;
+      // loop-early starts as soon as it has loaded, before the poller is in. Both must fail the same way.
+      const stuck = ["loop", "loop-early"].map((page) => renderPage(r, { page, target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", page) })
         .then(() => "rendered", (e: Error) => ({ message: e.message, ms: Date.now() - started }))
-        .finally(() => { loopSettled = true; });
+        .finally(() => { stuckSettled++; }));
       const plain = await renderPage(r, { page: "plain", target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", "plain") });
-      // The other page finished while the stuck one was still waiting.
-      expect(loopSettled).toBe(false);
+      // The other page finished while the stuck ones were still waiting.
+      expect(stuckSettled).toBe(0);
       expect(plain.sidecar.page).toBe("plain");
-      const failed = await loop;
-      // The ready wait allows Playwright's own timeout (5 s) 2 s to fire first, so the real limit is 7 s.
-      expect(failed).toMatchObject({ message: expect.stringMatching(/^loop \(android-phone, en\): page stopped responding after 7s/) });
-      expect((failed as { ms: number }).ms).toBeLessThan(20000);
+      const [loop, early] = await Promise.all(stuck);
+      expect(loop).toMatchObject({ message: expect.stringMatching(/^loop \(android-phone, en\): page stopped responding \(no answer within 5s\)/) });
+      expect(early).toMatchObject({ message: expect.stringMatching(/^loop-early \(android-phone, en\): page stopped responding \(no answer within 5s\)/) });
+      for (const f of [loop, early]) expect((f as { ms: number }).ms).toBeLessThan(20000);
       // The renderer keeps working after closing a stuck page.
       const again = await renderPage(r, { page: "plain", target: "android-phone", locale: "en", out: outPath(r.cfg, "en", "android-phone", "plain") });
       expect(again.sidecar.page).toBe("plain");
@@ -148,7 +151,7 @@ describe("renderer", () => {
     await withRenderer(ws, async (r) => {
       const started = Date.now();
       await expect(renderVideo(r, { page: "stuck-seek", target: "android-phone", locale: "en", out }, { fps: 2, duration: 1 }))
-        .rejects.toThrow(/stuck-seek \(android-phone, en\): page stopped responding after 3s/);
+        .rejects.toThrow(/stuck-seek \(android-phone, en\): page stopped responding \(no answer within 3s\)/);
       expect(Date.now() - started).toBeLessThan(15000);
       expect(processesFor(out)).toBe("");
     }, { timeoutMs: 3000 });
@@ -304,5 +307,39 @@ describe("renderer", () => {
     const ws = tmpWorkspace("basic");
     execFileSync("node", [`${ROOT}/dist/cli.js`, "render", "plain", "-C", ws, "-t", "iphone-6.9"], { encoding: "utf8" });
     expect(fs.existsSync(`${ws}/out/en/iphone-6.9/plain.png`)).toBe(true);
+  });
+});
+
+// waitForPage against a stand-in page that never answers an evaluate, as a page stuck in a loop does not.
+describe("stuck page", () => {
+  const never = () => new Promise<never>(() => {});
+  const stuckFailure = async (waitForFunction: () => Promise<unknown>) => {
+    const r = { timeoutMs: 300 };
+    const tab = { waitForFunction, evaluate: never } as unknown as Page;
+    const started = Date.now();
+    const e = await waitForPage(r, { tab, pageError: never() }, () => true, "set window.__ready", "p (t, en)", []).then(() => null, (x: unknown) => x);
+    return { message: (renderFailure(r, e, "p (t, en)", []) as Error).message, ms: Date.now() - started };
+  };
+
+  it("reports the renderer timeout whichever step finds the page stuck", async () => {
+    // The loop started after Playwright's poller was in the page: Playwright's timeout waits on the page and never settles.
+    const late = await stuckFailure(never);
+    // The loop started before the poller was in the page: Playwright's timeout fires, then the page does not answer.
+    const early = await stuckFailure(() => new Promise((_, rej) => setTimeout(() => rej(new errors.TimeoutError("Timeout 300ms exceeded")), 300)));
+    for (const f of [late, early]) {
+      expect(f.message).toBe("p (t, en): page stopped responding (no answer within 0.3s)");
+      // Both fail 2 s (the grace) after the timeout, not after a second full timeout.
+      expect(f.ms).toBeGreaterThanOrEqual(2290);
+      expect(f.ms).toBeLessThan(3500);
+    }
+  });
+
+  it("still reports a page that runs but never signals as not ready", async () => {
+    const r = { timeoutMs: 300 };
+    const tab = {
+      waitForFunction: () => new Promise((_, rej) => setTimeout(() => rej(new errors.TimeoutError("Timeout 300ms exceeded")), 300)),
+      evaluate: async () => undefined,
+    } as unknown as Page;
+    await expect(waitForPage(r, { tab, pageError: never() }, () => true, "set window.__ready", "p (t, en)", [])).rejects.toThrow(/^p \(t, en\) did not set window\.__ready within 0\.3s$/);
   });
 });

@@ -51,10 +51,15 @@ export async function openRenderer(cfg: ResolvedConfig, opts: { timeoutMs?: numb
 
 const inside = (dir: string, p: string) => path.resolve(p).startsWith(path.resolve(dir) + path.sep);
 
-// Thrown by bounded() when a browser call does not settle within the renderer timeout.
+// Thrown by bounded() when a browser call does not settle in time. Every limit is derived from the renderer timeout,
+// so the failure reports that timeout whichever step stopped answering.
 class PageStuck extends Error {
-  constructor(public ms: number) { super(`no answer within ${ms} ms`); }
+  constructor(ms: number) { super(`no answer within ${ms} ms`); }
 }
+
+// After Playwright's own timeout fires, a page that still runs answers at once; one that does not within this long
+// is stuck in a loop.
+const STUCK_GRACE_MS = 2000;
 
 // Resolves true if p settles within ms, false otherwise.
 async function settlesWithin(p: Promise<unknown>, ms: number): Promise<boolean> {
@@ -64,7 +69,7 @@ async function settlesWithin(p: Promise<unknown>, ms: number): Promise<boolean> 
 }
 
 // Every call into the page is raced against the renderer timeout: a page stuck in a loop never answers.
-async function bounded<T>(r: Renderer, p: Promise<T>, ms = r.timeoutMs): Promise<T> {
+async function bounded<T>(r: Pick<Renderer, "timeoutMs">, p: Promise<T>, ms = r.timeoutMs): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const late = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new PageStuck(ms)), ms); });
   try { return await Promise.race([p, late]); } finally { clearTimeout(timer); }
@@ -76,8 +81,8 @@ async function closeTab(tab: Page): Promise<void> {
   await settlesWithin(tab.context().close(), 5000);
 }
 
-function renderFailure(r: Renderer, e: unknown, label: string, logs: string[]): unknown {
-  if (e instanceof PageStuck) return new RenderError(`${label}: page stopped responding after ${e.ms / 1000}s`, logs);
+export function renderFailure(r: Pick<Renderer, "timeoutMs">, e: unknown, label: string, logs: string[]): unknown {
+  if (e instanceof PageStuck) return new RenderError(`${label}: page stopped responding (no answer within ${r.timeoutMs / 1000}s)`, logs);
   return e;
 }
 
@@ -221,18 +226,23 @@ async function openPage(r: Renderer, job: RenderJob, label: string, logs: string
 
 // Waits for the page's signal. An uncaught page error before it fails the render at once: a module that fails to
 // link (a missing export, a syntax error) never runs, so the kit cannot report it through window.__shotsmithError.
-async function waitForPage(r: Renderer, page: OpenedPage, signal: () => boolean, missing: string, label: string, logs: string[]): Promise<void> {
+// A page stuck in a loop fails STUCK_GRACE_MS after the timeout whichever moment the loop started.
+export async function waitForPage(r: Pick<Renderer, "timeoutMs">, page: Pick<OpenedPage, "tab" | "pageError">, signal: () => boolean, missing: string, label: string, logs: string[]): Promise<void> {
   const outcome = await Promise.race([
     // Only Playwright's own timeout means the page never signalled; a closed or crashed page reports its own error.
-    // Playwright's timeout needs a page that still runs, so a page stuck in a loop is caught by bounded() shortly after.
-    bounded(r, page.tab.waitForFunction(signal, null, { timeout: r.timeoutMs }), r.timeoutMs + 2000)
+    // When the loop starts after Playwright's poller is in the page, Playwright's timeout then waits on the stuck page
+    // to remove the poller, so bounded() catches it STUCK_GRACE_MS later. When the loop starts before the poller is in
+    // the page, Playwright's timeout does fire; the read of __shotsmithError below then finds the page stuck.
+    bounded(r, page.tab.waitForFunction(signal, null, { timeout: r.timeoutMs }), r.timeoutMs + STUCK_GRACE_MS)
       .then(() => "ok" as const, (e: Error) => {
         if (e instanceof PageStuck) throw e;
         return e instanceof errors.TimeoutError ? "timeout" as const : e;
       }),
     page.pageError,
   ]);
-  const kitError = await bounded(r, page.tab.evaluate(() => (window as any).__shotsmithError as string | undefined)).catch((e) => {
+  // After the timeout has passed, a page that still runs answers at once: allow it only the grace, not another timeout.
+  const kitWait = outcome === "timeout" ? STUCK_GRACE_MS : r.timeoutMs;
+  const kitError = await bounded(r, page.tab.evaluate(() => (window as any).__shotsmithError as string | undefined), kitWait).catch((e) => {
     if (e instanceof PageStuck) throw e;
     return undefined;
   });
