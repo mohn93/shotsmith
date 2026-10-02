@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { reachedWithoutLinks } from "../checks/store.js";
@@ -77,9 +78,15 @@ function checkWritable(cfg: ResolvedConfig, file: string): void {
 export function writeJson(cfg: ResolvedConfig, file: string, data: unknown): string {
   checkWritable(cfg, file);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
+  // "wx" fails on anything already at the name, a link included, so the write never goes through another file.
+  const tmp = `${file}.${crypto.randomUUID()}.tmp`;
+  const fd = fs.openSync(tmp, "wx");
   try {
-    fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`);
+    try {
+      fs.writeFileSync(fd, `${JSON.stringify(data, null, 2)}\n`);
+    } finally {
+      fs.closeSync(fd);
+    }
     fs.renameSync(tmp, file);
   } catch (e) {
     fs.rmSync(tmp, { force: true });

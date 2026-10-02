@@ -179,6 +179,40 @@ describe("plans", () => {
     expect(fs.readdirSync(path.dirname(file))).toEqual(["upload-plan-apple.json"]);
   });
 
+  it("opens its temp file exclusively, so a file already at that name is not written through", async () => {
+    const cfg = await uploadWorkspace({ export: false });
+    const file = planPath(cfg, "apple");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const victim = path.join(tempDir("victim-"), "secret.txt");
+    fs.writeFileSync(victim, "untouched");
+    const uuid = vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000000");
+    try {
+      const planted = `${file}.${crypto.randomUUID()}.tmp`;
+      fs.symlinkSync(victim, planted);
+      expect(() => writeJson(cfg, file, { a: 1 })).toThrow(/EEXIST/);
+      expect(fs.readFileSync(victim, "utf8")).toBe("untouched");
+      expect(fs.lstatSync(planted).isSymbolicLink()).toBe(true);
+      expect(fs.existsSync(file)).toBe(false);
+    } finally {
+      uuid.mockRestore();
+    }
+  });
+
+  it("gives each write its own temp name", async () => {
+    const cfg = await uploadWorkspace({ export: false });
+    const file = planPath(cfg, "apple");
+    const rename = vi.spyOn(fs, "renameSync");
+    try {
+      writeJson(cfg, file, { a: 1 });
+      writeJson(cfg, file, { a: 2 });
+      const [first, second] = rename.mock.calls.map((c) => c[0] as string);
+      expect(first).not.toBe(second);
+      expect(first).toMatch(/\.[0-9a-f-]{36}\.tmp$/);
+    } finally {
+      rename.mockRestore();
+    }
+  });
+
   it("does not write through a linked output folder", async () => {
     const cfg = await uploadWorkspace({ export: false });
     const elsewhere = tempDir("elsewhere-");

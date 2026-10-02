@@ -20,6 +20,8 @@ function planOutcome(cfg: ResolvedConfig, plan: UploadPlan, next: string, save =
 }
 
 const touched = (report: UploadReport) => report.sets.some((s) => s.changedStore);
+// A store write that deleted and uploaded nothing created a set or reordered one (or left a reservation).
+const onlyCreatedOrReordered = (report: UploadReport) => report.sets.every((s) => !s.deleted.length && !s.uploaded.length);
 
 // A failed apply still leaves its report and says what it did before it stopped, then fails the command (exit 2).
 function reportOutcome(cfg: ResolvedConfig, report: UploadReport, last: string[]): UploadOutcome {
@@ -27,7 +29,7 @@ function reportOutcome(cfg: ResolvedConfig, report: UploadReport, last: string[]
   if (!report.ok) {
     const partly = report.store !== "apple" ? []
       : touched(report)
-        ? ["App Store Connect was partly changed: the screenshots listed above were deleted or uploaded and stay in the version, which may now be incomplete. Sets not listed were not touched. Run shotsmith upload apple again with the same options, show the user the new plan, and apply after they confirm. Do not submit the version until then."]
+        ? [`App Store Connect was partly changed: ${onlyCreatedOrReordered(report) ? "a screenshot set was created or reordered before the failure, and the version" : "the screenshots listed above were deleted or uploaded and stay in the version, which"} may now be incomplete. Sets not listed were not touched. Run shotsmith upload apple again with the same options, show the user the new plan, and apply after they confirm. Do not submit the version until then.`]
         : [`Nothing was changed in ${SERVICE_NAME.apple}.`];
     return {
       ok: false, exitCode: 2,
@@ -58,7 +60,7 @@ export async function runPlay(cfg: ResolvedConfig, o: UploadOptions, connect: ()
   if (o.notSentForReview && o.commit === undefined) throw new Error("--changes-not-sent-for-review only applies to --commit");
   if (o.commit !== undefined) {
     checkCommit(cfg, o.commit);
-    const res = await commitPlay(cfg, o.commit, { notSentForReview: o.notSentForReview }, connect());
+    const res = await commitPlay(cfg, o.commit, { notSentForReview: o.notSentForReview, skipCheck: true }, connect());
     return { ok: true, exitCode: 0, lines: res.lines, json: { committed: res.editId } };
   }
   const scan = await localSets(cfg, "play", { locales: o.locales });

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ResolvedConfig } from "../config/schema.js";
-import { type HttpRequest, type Method, StoreError, type Transport, parseBody } from "./http.js";
+import { type HttpRequest, type Method, StoreError, type Transport, parseBody, rawBodyOf } from "./http.js";
 import type { LocalFile, LocalSet } from "./local.js";
 import { type AppliedSet, type PlannedSet, type RemoveReason, type UploadPlan, type UploadReport, makePlan, samePlan } from "./plan.js";
 import { md5 } from "./util.js";
@@ -54,7 +54,7 @@ export class AscClient {
 }
 
 function ascMessage(method: string, url: string, status: number, data: Json): string {
-  const detail = ((data.errors ?? []) as Json[]).map((e) => e.detail ?? e.title).filter(Boolean).join("; ").replace(/\.+$/, "") || String(data.rawBody ?? "");
+  const detail = ((data.errors ?? []) as Json[]).map((e) => e.detail ?? e.title).filter(Boolean).join("; ").replace(/\.+$/, "") || (rawBodyOf(data) ?? "");
   const what = `${method} ${url.slice(ASC.length).split("?")[0]} failed (${status})${detail ? `: ${detail}` : ""}`;
   if (status === 401) return `${what}. App Store Connect did not accept the API key: check the issuer id, key id and key file`;
   if (status === 403) return `${what}. The API key's role cannot do this; it needs the App Manager or Admin role`;
@@ -157,6 +157,8 @@ export async function applyApple(cfg: ResolvedConfig, local: LocalSet[], o: { ve
     startedAt: new Date(now()).toISOString(), finishedAt: "", ok: false, error: null, sets: [],
   };
   try {
+    // Before the first write to any set, so an export that changed since the plan costs nothing.
+    for (const s of fresh.sets) if (s.plan.status !== "unchanged") checkExports(s);
     for (const s of fresh.sets) {
       // The record goes into the report first, so a failure still shows what was done to this set.
       const rec: AppliedSet = { locale: s.plan.locale, storeLocale: s.plan.storeLocale, target: s.plan.target, slot: s.plan.slot, status: "failed", changedStore: false, deleted: [], uploaded: [], order: [] };
@@ -171,6 +173,13 @@ export async function applyApple(cfg: ResolvedConfig, local: LocalSet[], o: { ve
   return report;
 }
 
+// Every file of a set to change must still match the MD5 in the plan.
+function checkExports(s: AppleSet): void {
+  for (const f of s.local.files) {
+    if (md5(fs.readFileSync(f.file)) !== f.md5) throw new Error(`${s.plan.storeLocale} ${s.plan.slot}: ${f.rel} changed after the plan was made; run the plan again`);
+  }
+}
+
 // Fills `rec` as it goes: on failure it keeps status "failed" and what was done so far.
 async function applySet(c: AscClient, s: AppleSet, rec: AppliedSet, run: Run): Promise<void> {
   const { plan: p, local } = s;
@@ -182,7 +191,7 @@ async function applySet(c: AscClient, s: AppleSet, rec: AppliedSet, run: Run): P
   }
   const where = `${p.storeLocale} ${p.slot}`;
   try {
-    // Before the first write, so an export that changed since the plan costs nothing.
+    // Again, in case an earlier set took long enough for an export to change.
     for (const f of local.files) if (md5(fs.readFileSync(f.file)) !== f.md5) throw new Error(`${f.rel} changed after the plan was made; run the plan again`);
     const setId = s.setId ?? String((await c.request("POST", "/v1/appScreenshotSets", {
       data: { type: "appScreenshotSets", attributes: { screenshotDisplayType: p.slot }, relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: s.localizationId } } } },

@@ -107,10 +107,11 @@ describe("error statuses with a body that is not JSON", () => {
 
   it("still raise a StoreError with the status and the start of the body", async () => {
     const stores = [
-      new AscClient({ transport: answer(502), token: () => "t" }).request("GET", "/v1/apps"),
-      new PlayClient({ transport: answer(502), token: async () => "t" }, "com.example.demo").openEdit(),
+      () => new AscClient({ transport: answer(502), token: () => "t" }).request("GET", "/v1/apps"),
+      () => new PlayClient({ transport: answer(502), token: async () => "t" }, "com.example.demo").openEdit(),
     ];
-    for (const failure of stores) {
+    for (const start of stores) {
+      const failure = start();
       await expect(failure).rejects.toBeInstanceOf(StoreError);
       await expect(failure).rejects.toMatchObject({ status: 502, message: expect.stringContaining(`(502): ${html.slice(0, 200)}`) });
       await expect(failure).rejects.not.toThrow(html.slice(0, 201));
@@ -120,6 +121,35 @@ describe("error statuses with a body that is not JSON", () => {
   it("keep the not JSON error on a 2xx", async () => {
     await expect(new AscClient({ transport: answer(200), token: () => "t" }).request("GET", "/v1/apps")).rejects.toThrow(/App Store Connect answered with something that is not JSON/);
     await expect(new PlayClient({ transport: answer(200), token: async () => "t" }, "com.example.demo").openEdit()).rejects.toThrow(/Google Play answered with something that is not JSON/);
+  });
+});
+
+describe("a JSON error body with a rawBody key", () => {
+  const body = JSON.stringify({ rawBody: "<html>from the body</html>" });
+  const answer: Transport = async () => ({ status: 500, text: body });
+
+  it("is treated as JSON, so its key is not shown as the start of a page that is not JSON", async () => {
+    for (const start of [
+      () => new AscClient({ transport: answer, token: () => "t" }).request("GET", "/v1/apps"),
+      () => new PlayClient({ transport: answer, token: async () => "t" }, "com.example.demo").openEdit(),
+    ]) {
+      const failure = start();
+      await expect(failure).rejects.toBeInstanceOf(StoreError);
+      await expect(failure).rejects.not.toThrow(/from the body/);
+    }
+  });
+
+  it("is still read as the start of a body that is not JSON", () => {
+    const asc = new AscClient({ transport: async () => ({ status: 500, text: "<html>proxy</html>" }), token: () => "t" });
+    return expect(asc.request("GET", "/v1/apps")).rejects.toThrow("(500): <html>proxy</html>");
+  });
+});
+
+describe("fetchTransport with a URL that does not parse", () => {
+  it("names the call by the raw URL without its query, and keeps the failure", async () => {
+    const failure = fetchTransport()({ method: "GET", url: "not a url?token=1#frag" });
+    await expect(failure).rejects.toThrow(/^GET not a url failed: /);
+    await expect(failure).rejects.not.toThrow(/token|frag/);
   });
 });
 
