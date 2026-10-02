@@ -94,4 +94,13 @@ describe("skill content", () => {
     expect(skill).toMatch(/^## Without a shell or Node/m);
     expect(skill).toMatch(/do not describe renders you have not seen/i);
   });
+
+  it("documents the published install route and the release process", () => {
+    const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+    expect(readme).not.toMatch(/not on npm yet|Pre-release/i);
+    expect(readme).toMatch(/npx shotsmith@\d+\.\d+\.\d+ init/);
+    expect(readme).toContain("RELEASE.md");
+    const release = fs.readFileSync(path.join(ROOT, "RELEASE.md"), "utf8");
+    for (const s of ["Trusted Publisher", "release.yml", "check-release", "pack-skill", "three-app", "## Trial record"]) expect(release, s).toContain(s);
+  });
 });
