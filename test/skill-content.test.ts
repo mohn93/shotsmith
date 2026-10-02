@@ -9,6 +9,9 @@ const read = (f: string) => fs.readFileSync(path.join(SKILL, f), "utf8");
 const DOCS = ["SKILL.md", "styles.md", "targets.md", "reference/README.md"];
 const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
 
+// Any version, tag or range after "shotsmith@" is a pin; the plugin id "shotsmith@shotsmith" is not.
+const PIN = /shotsmith@(?!shotsmith\b)[\w.^~-]+/g;
+
 describe("skill content", () => {
   it("has frontmatter with its name and a description", () => {
     const m = read("SKILL.md").match(/^---\nname: (.+)\ndescription: (.+)\n---\n/);
@@ -16,11 +19,16 @@ describe("skill content", () => {
     expect(m?.[2].length).toBeGreaterThan(80);
   });
 
+  it("treats any tag or range after shotsmith@ as a pin, and the plugin id as none", () => {
+    const sample = "npx shotsmith@0.1.0 init, shotsmith@latest, shotsmith@^0.1, shotsmith@~0.1.0, /plugin install shotsmith@shotsmith";
+    expect(sample.match(PIN)).toEqual(["shotsmith@0.1.0", "shotsmith@latest", "shotsmith@^0.1", "shotsmith@~0.1.0"]);
+  });
+
   it("pins this package's version wherever it names shotsmith@", () => {
     const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
     const docsText = DOCS.map(read).join("\n");
     const readmeText = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
-    const pins = (docsText + "\n" + readmeText).match(/shotsmith@\d+[\w.-]*/g) ?? [];
+    const pins = (docsText + "\n" + readmeText).match(PIN) ?? [];
     expect(pins.length).toBeGreaterThan(0);
     expect([...new Set(pins)]).toEqual([`shotsmith@${version}`]);
   });

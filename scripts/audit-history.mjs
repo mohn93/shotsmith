@@ -15,6 +15,7 @@ const PATTERNS = [
   ["Google API key", /\bAIza[0-9A-Za-z_-]{35}\b/],
   ["Slack token", /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
   ["Anthropic API key", /\bsk-ant-[A-Za-z0-9_-]{20,}/],
+  ["Stripe secret key", /\b[sr]k_live_[0-9A-Za-z]{20,}/],
 ];
 
 export function findSecrets(text) {
@@ -23,7 +24,7 @@ export function findSecrets(text) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  const git = spawn("git", ["log", "--all", "-p", "--format=commit %H"], { cwd: root });
+  const git = spawn("git", ["log", "--all", "-p", "--cc", "--format=commit %H"], { cwd: root });
   let commit = "", hits = 0, gitStderr = "";
   const closed = new Promise((resolve) => {
     git.on("close", resolve);
@@ -32,6 +33,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   git.stderr.on("data", (chunk) => { gitStderr += chunk.toString(); });
   for await (const line of readline.createInterface({ input: git.stdout })) {
     if (line.startsWith("commit ")) { commit = line.slice(7, 19); continue; }
+    // Added lines: "+" in a plain diff; "++" or "+ " in a combined (merge) diff.
     if (!line.startsWith("+")) continue;
     for (const kind of findSecrets(line)) { console.log(`${commit} ${kind}`); hits++; }
   }
