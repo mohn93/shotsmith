@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Check, test and pack only; publish nothing
+        type: boolean
+        default: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # create the GitHub release
+  id-token: write   # npm trusted publishing and provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - name: Install Chromium and ffmpeg
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Check the release
+        run: node scripts/check-release.mjs ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      - run: npm run lint
+      - run: npm test
+      - run: npm run pack-skill
+      - name: Publish to npm
+        if: github.ref_type == 'tag'
+        run: npm publish
+      - name: Create the GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/store-screenshots-*.zip --title "Shotsmith ${GITHUB_REF_NAME#v}" --notes-file release/notes.md --verify-tag
+      - name: Dry run
+        if: github.ref_type != 'tag'
+        run: npm publish --dry-run --ignore-scripts
