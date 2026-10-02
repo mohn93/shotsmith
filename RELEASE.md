@@ -17,6 +17,7 @@ A version tag on `main` runs `.github/workflows/release.yml`. That workflow:
    - no environment.
 
    No npm token is stored in GitHub.
+3. Before making the repository public, fetch pull request refs (`git fetch origin '+refs/pull/*/head:refs/remotes/origin/pull/*'`) and run `node scripts/audit-history.mjs`; GitHub keeps those refs fetchable.
 
 ## Each release
 
@@ -26,7 +27,7 @@ A version tag on `main` runs `.github/workflows/release.yml`. That workflow:
    - Set the same version in every `shotsmith@<version>` in `skills/store-screenshots/` and README.md; the skill-content test checks this.
    - Add a `## <x.y.z>` section to `CHANGELOG.md`.
 3. **Check it.** Run `npm test` and `node scripts/check-release.mjs`, which prints `Ready to release <x.y.z> (dry run)`. Merge into `dev` through a pull request with CI green.
-4. **Dry-run the release workflow.** Actions, then Release, then Run workflow on `dev` with dry-run on. It must pass.
+4. **Dry-run the release workflow.** Actions, then Release, then Run workflow on `dev` with dry-run on. A manual run never publishes: it runs the verify job only. It must pass.
 5. **Merge `dev` into `main`.** CI must be green on `main`.
 6. **Tag and push.**
    - Run `git tag -a v<x.y.z> origin/main -m "Shotsmith <x.y.z>"`, then `git push origin v<x.y.z>`.
@@ -35,6 +36,14 @@ A version tag on `main` runs `.github/workflows/release.yml`. That workflow:
    - Check npm and its provenance: `npm view shotsmith@<x.y.z> version dist.attestations`.
    - Check the GitHub release: `gh release view v<x.y.z>`, which should list the zip.
    - In an empty folder, run `npx shotsmith@<x.y.z> init demo --app Demo`, then `npx shotsmith build` in it.
+
+### If npm publish succeeded but the GitHub release failed
+
+Re-running the workflow fails because the version is already on npm. Instead, on the tagged commit run `node scripts/check-release.mjs` and `npm run pack-skill` locally, then:
+
+```
+gh release create v<x.y.z> release/store-screenshots-<x.y.z>.zip --title "Shotsmith <x.y.z>" --notes-file release/notes.md --verify-tag
+```
 
 ## Trial record
 

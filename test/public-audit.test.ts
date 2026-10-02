@@ -43,6 +43,8 @@ describe("findSecrets", () => {
     expect(findSecrets(`t=npm_${"a".repeat(36)}`)).toEqual(["npm token"]);
     expect(findSecrets(`k=AIza${"a".repeat(35)}`)).toEqual(["Google API key"]);
     expect(findSecrets(`x=${"xox"}b-1234567890-abc`)).toEqual(["Slack token"]);
+    expect(findSecrets(`t=${"github"}_pat_${"a".repeat(30)}`)).toEqual(["GitHub fine-grained token"]);
+    expect(findSecrets(`k=${"sk"}-ant-${"a".repeat(30)}`)).toEqual(["Anthropic API key"]);
     expect(findSecrets("generateKeyPairSync(\"ec\") and a private_key field name")).toEqual([]);
   });
 });

@@ -10,9 +10,11 @@ const PATTERNS = [
   ["private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
   ["AWS access key", /\bAKIA[0-9A-Z]{16}\b/],
   ["GitHub token", /\bgh[pousr]_[A-Za-z0-9]{36,}\b/],
+  ["GitHub fine-grained token", /\bgithub_pat_[A-Za-z0-9_]{22,}/],
   ["npm token", /\bnpm_[A-Za-z0-9]{36}\b/],
   ["Google API key", /\bAIza[0-9A-Za-z_-]{35}\b/],
   ["Slack token", /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
+  ["Anthropic API key", /\bsk-ant-[A-Za-z0-9_-]{20,}/],
 ];
 
 export function findSecrets(text) {
