@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 20 }
+          - { os: ubuntu-latest, node: 24 }
+          - { os: macos-latest, node: 24 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium and ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install Chromium and ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          npx playwright install chromium
+          brew install ffmpeg
+      - run: npm run lint
+      - run: npm test
+      # A missing baseline is written and its test fails; this keeps the new images for review.
+      - name: Keep baselines for review
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: baselines-${{ matrix.os }}-node${{ matrix.node }}
+          path: test/baselines/
+          if-no-files-found: ignore
+      - name: Build the examples
+        run: node scripts/build-examples.mjs
+      - name: Check the package contents
+        run: npm pack --dry-run --ignore-scripts
