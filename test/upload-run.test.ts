@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AppleDeps } from "../src/upload/apple.js";
 import { type UploadPlan, type UploadReport, planPath, readPlan, reportPath } from "../src/upload/plan.js";
 import type { PlayDeps } from "../src/upload/play.js";
@@ -86,7 +86,10 @@ describe("runApple", () => {
     const out = await runApple(cfg, { apply: true }, apple(fake));
     expect(out).toMatchObject({ ok: false, exitCode: 2 });
     expect(out.lines.join("\n")).not.toContain("Nothing was changed");
-    expect(out.lines.some((l) => l.startsWith("App Store Connect was partly changed"))).toBe(true);
+    const partly = out.lines.find((l) => l.startsWith("App Store Connect was partly changed"));
+    expect(partly).toMatch(/^App Store Connect was partly changed: a screenshot set was created or reordered before the failure, /);
+    expect(partly).not.toMatch(/deleted or uploaded/);
+    expect(partly).toMatch(/Run shotsmith upload apple again with the same options.*Do not submit the version until then\.$/);
     expect((out.json.report as UploadReport).sets[0]).toMatchObject({ status: "failed", changedStore: true, deleted: [], uploaded: [] });
   });
 
@@ -223,6 +226,20 @@ describe("runPlay", () => {
     await expect(runPlay(cfg, { commit: "1002", notSentForReview: true }, play(fake))).resolves.toMatchObject({ ok: true, json: { committed: "1002" } });
     await expect(runPlay(cfg, { notSentForReview: true }, never)).rejects.toThrow(/--changes-not-sent-for-review only applies to --commit/);
     await expect(runPlay(cfg, { apply: true, notSentForReview: true }, never)).rejects.toThrow(/--changes-not-sent-for-review only applies to --commit/);
+  });
+
+  it("reads the report once when committing", async () => {
+    const cfg = await uploadWorkspace();
+    const fake = new FakePlay();
+    await runPlay(cfg, {}, play(fake));
+    await runPlay(cfg, { apply: true }, play(fake));
+    const read = vi.spyOn(fs, "readFileSync");
+    try {
+      await runPlay(cfg, { commit: "1002" }, play(fake));
+      expect(read.mock.calls.filter(([file]) => file === reportPath(cfg, "play"))).toHaveLength(1);
+    } finally {
+      read.mockRestore();
+    }
   });
 
   it("rejects --apply with --commit, and a bad edit id, before connecting", async () => {

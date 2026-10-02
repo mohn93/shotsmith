@@ -163,6 +163,14 @@ describe("commitPlay", () => {
     await expect(commitPlay(cfg, "1002", {}, deps(fake))).resolves.toMatchObject({ editId: "1002" });
   });
 
+  it("skips the report check when the caller has already made it", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    const report = await applyPlay(cfg, sets, plan, deps(fake));
+    wroteReport(cfg, null);
+    await expect(commitPlay(cfg, report.editId!, {}, deps(fake))).rejects.toThrow(/staged no edit/);
+    await expect(commitPlay(cfg, report.editId!, { skipCheck: true }, deps(fake))).resolves.toMatchObject({ editId: "1002" });
+  });
+
   it("allows an edit when there is no report", async () => {
     const { cfg, sets, fake, plan } = await planned();
     const report = await applyPlay(cfg, sets, plan, deps(fake));

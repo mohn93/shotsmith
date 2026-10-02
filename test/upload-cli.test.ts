@@ -115,11 +115,20 @@ describe("upload command", () => {
 
   it("has every flag the docs name in an upload command", () => {
     const text = ["skills/store-screenshots/targets.md", "skills/store-screenshots/SKILL.md", "README.md"].map((f) => fs.readFileSync(path.join(ROOT, f), "utf8")).join("\n");
-    const all = help("apple") + help("play");
-    const spans = [...text.matchAll(/`[^`]*upload (?:apple|play)[^`]*`/g)].map((m) => m[0]);
+    const upload = help("apple") + help("play");
+    // Other flags the docs name on their own (`-C`, `--json`, `--dir`) belong to the program and to `skill install`.
+    const known = upload + run(["--help"]).out + run(["skill", "install", "--help"]).out;
     // Long flags, and short ones such as -l (not the dashes inside a word or a long flag).
-    const flags = [...new Set(spans.flatMap((s) => s.match(/(?<![\w-])--?[a-zA-Z][\w-]*/g) ?? []))];
+    const flagsIn = (spans: string[]) => [...new Set(spans.flatMap((s) => s.match(/(?<![\w-])--?[a-zA-Z][\w-]*/g) ?? []))];
+    const has = (helpText: string, f: string) => new RegExp(`(?<![\\w-])${f}(?![\\w-])`).test(helpText);
+    const commandSpans = [...text.matchAll(/`[^`]*upload (?:apple|play)[^`]*`/g)].map((m) => m[0]);
+    // Spans that begin with a flag: `--apply`, `--commit <editId>`, `--app-version <v>`.
+    const flagSpans = [...text.matchAll(/`--?[a-zA-Z][^`]*`/g)].map((m) => m[0]);
+    const flags = flagsIn(commandSpans);
     expect(flags).toEqual(expect.arrayContaining(["--apply", "--commit", "--app-version", "-l"]));
-    for (const f of flags) expect(all, f).toMatch(new RegExp(`(?<![\\w-])${f}(?![\\w-])`));
+    for (const f of flags) expect(has(upload, f), f).toBe(true);
+    const standalone = flagsIn(flagSpans);
+    expect(standalone).toEqual(expect.arrayContaining(["--apply", "--commit", "--app-version", "--changes-not-sent-for-review"]));
+    for (const f of standalone) expect(has(known, f), f).toBe(true);
   });
 });

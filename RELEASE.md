@@ -10,11 +10,15 @@ A version tag on `main` runs `.github/workflows/release.yml`. That workflow:
 ## One-time setup
 
 1. The repository is public. npm provenance needs a public source repository.
-2. On npmjs.com, open package `shotsmith`, then Settings, then Trusted Publisher, and add GitHub Actions:
-   - owner `mohn93`;
-   - repository `shotsmith`;
-   - workflow `release.yml`;
-   - no environment.
+2. Register the trusted publisher with npm:
+   ```
+   npx -y npm@latest trust github shotsmith --file release.yml --repo mohn93/shotsmith --allow-publish
+   ```
+   Then confirm it:
+   ```
+   npx -y npm@latest trust list shotsmith
+   ```
+   The output must show `file: release.yml`, `repository: mohn93/shotsmith` and `permissions` including `publish`. The website setting did not save the first time, so always confirm with `trust list` before tagging.
 
    No npm token is stored in GitHub.
 3. Before making the repository public, fetch pull request refs (`git fetch origin '+refs/pull/*/head:refs/remotes/origin/pull/*'`) and run `node scripts/audit-history.mjs`; GitHub keeps those refs fetchable.
@@ -30,6 +34,7 @@ A version tag on `main` runs `.github/workflows/release.yml`. That workflow:
 4. **Dry-run the release workflow.** Actions, then Release, then Run workflow on `dev` with dry-run on. A manual run never publishes: it runs the verify job only. It must pass.
 5. **Merge `dev` into `main`.** CI must be green on `main`.
 6. **Tag and push.**
+   - Run `git fetch origin`, so `origin/main` is current.
    - Run `git tag -a v<x.y.z> origin/main -m "Shotsmith <x.y.z>"`, then `git push origin v<x.y.z>`.
    - Watch the release workflow until it finishes.
 7. **Verify.**

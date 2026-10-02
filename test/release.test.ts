@@ -1,11 +1,11 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error -- plain .mjs script without types
 import { packSkill } from "../scripts/pack-skill.mjs";
 // @ts-expect-error -- plain .mjs script without types
-import { checkRelease } from "../scripts/check-release.mjs";
+import { checkRelease, npmStatus } from "../scripts/check-release.mjs";
 import { ROOT, tempDir } from "./helpers.js";
 
 const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
@@ -62,7 +62,75 @@ describe("check-release", () => {
     expect(fail).toThrow(/CHANGELOG\.md has no "## 1\.2\.3" section/);
   });
 
+  it("lists a missing or malformed manifest as a problem", () => {
+    const missing = releaseRoot();
+    fs.rmSync(path.join(missing, ".claude-plugin/plugin.json"));
+    expect(() => checkRelease(missing)).toThrow(/Not ready to release:\n- \.claude-plugin\/plugin\.json is missing or not valid JSON/);
+    const malformed = releaseRoot();
+    fs.writeFileSync(path.join(malformed, ".claude-plugin/marketplace.json"), "{ not json");
+    const fail = () => checkRelease(malformed);
+    expect(fail).toThrow(/marketplace\.json is missing or not valid JSON/);
+    expect(fail).not.toThrow(SyntaxError);
+    for (const content of ["null", "42", "[]", '"1.2.3"']) {
+      const notObject = releaseRoot();
+      fs.writeFileSync(path.join(notObject, ".claude-plugin/plugin.json"), content);
+      expect(() => checkRelease(notObject), content).toThrow(/Not ready to release:\n- \.claude-plugin\/plugin\.json is missing or not valid JSON/);
+    }
+    const noPackage = releaseRoot();
+    fs.rmSync(path.join(noPackage, "package.json"));
+    expect(() => checkRelease(noPackage)).toThrow(/package\.json is missing or not valid JSON/);
+    const noChangelog = releaseRoot();
+    fs.rmSync(path.join(noChangelog, "CHANGELOG.md"));
+    expect(() => checkRelease(noChangelog)).toThrow(/CHANGELOG\.md is missing or unreadable/);
+  });
+
+  it("reports an npm lookup failure instead of treating it as not published", () => {
+    const o = { tag: "v1.2.3", onMain: true };
+    expect(() => checkRelease(releaseRoot(), { ...o, npmError: "getaddrinfo ENOTFOUND registry.npmjs.org" })).toThrow(/could not check npm for 1\.2\.3: getaddrinfo ENOTFOUND/);
+  });
+
   it("passes on this repository", () => {
     expect(checkRelease(ROOT).version).toBe(version);
+  });
+});
+
+describe("check-release npmStatus", () => {
+  it("treats only E404 and no match as not published", () => {
+    expect(npmStatus({ status: 0, stdout: "1.2.3\n", stderr: "" }, "1.2.3")).toEqual({ published: true });
+    expect(npmStatus({ status: 1, stdout: "", stderr: "npm error code E404\nnpm error 404 Not Found" }, "1.2.3")).toEqual({ published: false });
+    expect(npmStatus({ status: 1, stdout: "", stderr: "npm error No match found for version 1.2.3" }, "1.2.3")).toEqual({ published: false });
+  });
+
+  it("reports any other failure with the first line of stderr", () => {
+    expect(npmStatus({ status: 1, stdout: "", stderr: "\nnpm error code ENOTFOUND\nnpm error network" }, "1.2.3")).toEqual({ published: false, npmError: "npm error code ENOTFOUND" });
+    expect(npmStatus({ status: null, stdout: "", stderr: "", error: new Error("spawn npm ENOENT") }, "1.2.3").npmError).toBe("spawn npm ENOENT");
+  });
+});
+
+describe("check-release CLI", () => {
+  // A temp repo with its own copy of the script, which resolves the repo root from its own location.
+  function cliRoot(): string {
+    const root = releaseRoot();
+    fs.mkdirSync(path.join(root, "scripts"));
+    fs.copyFileSync(path.join(ROOT, "scripts/check-release.mjs"), path.join(root, "scripts/check-release.mjs"));
+    return root;
+  }
+  const run = (root: string, ...args: string[]) => spawnSync(process.execPath, [path.join(root, "scripts/check-release.mjs"), ...args], { cwd: root, encoding: "utf8" });
+
+  it("passes without a tag and writes the release notes", () => {
+    const root = cliRoot();
+    const r = run(root);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Ready to release 1.2.3 (dry run)");
+    expect(fs.readFileSync(path.join(root, "release/notes.md"), "utf8")).toBe("- First.\n- Second.\n");
+  });
+
+  it("fails on a malformed tag without looking at git or npm", () => {
+    const root = cliRoot();
+    const r = run(root, "1.2.3");
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/tag must look like v1\.2\.3/);
+    expect(r.stderr).not.toMatch(/not on main|npm/);
+    expect(fs.existsSync(path.join(root, "release"))).toBe(false);
   });
 });

@@ -7,7 +7,28 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const json = (root, file) => JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
+// Reads a JSON object file; a missing, malformed or non-object one is recorded as a problem and gives null.
+function readJson(root, file, problems) {
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
+    if (data === null || typeof data !== "object" || Array.isArray(data)) throw new Error("not a JSON object");
+    return data;
+  } catch {
+    problems.push(`${file} is missing or not valid JSON`);
+    return null;
+  }
+}
+
+// Turns an `npm view` result into checkRelease options: only E404 / "No match found" means not published.
+export function npmStatus(view, version) {
+  if (view.status === 0) return { published: view.stdout.trim() === version };
+  const err = `${view.stderr ?? ""}`;
+  if (/E404|No match found/.test(err)) return { published: false };
+  const first = err.split("\n").find((l) => l.trim()) ?? view.error?.message ?? `npm view exited with ${view.status}`;
+  return { published: false, npmError: first.trim() };
+}
+
+const TAG_FORMAT = /^v\d+\.\d+\.\d+$/;
 
 function changelogSection(text, version) {
   const lines = text.split("\n");
@@ -19,18 +40,36 @@ function changelogSection(text, version) {
 
 export function checkRelease(root, o = {}) {
   const problems = [];
-  const { version } = json(root, "package.json");
-  const plugin = json(root, ".claude-plugin/plugin.json").version;
-  if (plugin !== version) problems.push(`.claude-plugin/plugin.json version ${plugin} does not match package.json version ${version}`);
-  const market = json(root, ".claude-plugin/marketplace.json").plugins?.[0]?.version;
-  if (market !== version) problems.push(`.claude-plugin/marketplace.json version ${market} does not match package.json version ${version}`);
-  const notes = changelogSection(fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), version);
-  if (!notes) problems.push(`CHANGELOG.md has no "## ${version}" section with notes`);
+  const pkg = readJson(root, "package.json", problems);
+  const version = pkg?.version;
+  if (pkg && typeof version !== "string") problems.push("package.json has no version");
+  if (typeof version === "string") {
+    const plugin = readJson(root, ".claude-plugin/plugin.json", problems);
+    if (plugin && plugin.version !== version) problems.push(`.claude-plugin/plugin.json version ${plugin.version} does not match package.json version ${version}`);
+    const market = readJson(root, ".claude-plugin/marketplace.json", problems);
+    if (market && market.plugins?.[0]?.version !== version) problems.push(`.claude-plugin/marketplace.json version ${market.plugins?.[0]?.version} does not match package.json version ${version}`);
+  }
+  let notes = null;
+  if (typeof version === "string") {
+    let text = null;
+    try {
+      text = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
+    } catch {
+      problems.push("CHANGELOG.md is missing or unreadable");
+    }
+    if (text !== null) {
+      notes = changelogSection(text, version);
+      if (!notes) problems.push(`CHANGELOG.md has no "## ${version}" section with notes`);
+    }
+  }
   if (o.tag !== undefined) {
-    if (!/^v\d+\.\d+\.\d+$/.test(o.tag)) problems.push(`tag must look like v1.2.3, got "${o.tag}"`);
-    else if (o.tag !== `v${version}`) problems.push(`tag ${o.tag} does not match package.json version ${version}`);
-    if (!o.onMain) problems.push("the tagged commit is not on main; tag a commit on main");
-    if (o.published) problems.push(`${version} is already on npm; bump the version`);
+    if (!TAG_FORMAT.test(o.tag)) problems.push(`tag must look like v1.2.3, got "${o.tag}"`);
+    else {
+      if (typeof version === "string" && o.tag !== `v${version}`) problems.push(`tag ${o.tag} does not match package.json version ${version}`);
+      if (!o.onMain) problems.push("the tagged commit is not on main; tag a commit on main");
+      if (o.npmError) problems.push(`could not check npm for ${version}: ${o.npmError}`);
+      else if (o.published) problems.push(`${version} is already on npm; bump the version`);
+    }
   }
   if (problems.length) throw new Error(`Not ready to release:\n- ${problems.join("\n- ")}`);
   return { version, notes };
@@ -41,11 +80,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const tag = process.argv[2] || undefined;
   const o = {};
   if (tag) {
-    const { version } = json(root, "package.json");
     o.tag = tag;
-    o.onMain = spawnSync("git", ["merge-base", "--is-ancestor", "HEAD", "origin/main"], { cwd: root }).status === 0;
-    const view = spawnSync("npm", ["view", `shotsmith@${version}`, "version"], { cwd: root, encoding: "utf8" });
-    o.published = view.status === 0 && view.stdout.trim() === version;
+    // A malformed tag fails on its own; skip the git and npm lookups for it.
+    if (TAG_FORMAT.test(tag)) {
+      const version = readJson(root, "package.json", [])?.version;
+      o.onMain = spawnSync("git", ["merge-base", "--is-ancestor", "HEAD", "origin/main"], { cwd: root }).status === 0;
+      if (typeof version === "string") {
+        const view = spawnSync("npm", ["view", `shotsmith@${version}`, "version"], { cwd: root, encoding: "utf8" });
+        Object.assign(o, npmStatus(view, version));
+      }
+    }
   }
   try {
     const { version, notes } = checkRelease(root, o);

@@ -18,23 +18,39 @@ permissions: {}
 
 jobs:
   verify:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
       - run: npm ci
-      - name: Install Chromium and ffmpeg
+      - name: Playwright version
+        id: playwright
         run: |
-          npx playwright install --with-deps chromium
-          sudo apt-get update
+          echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+      - name: Install Chromium and ffmpeg
+        env:
+          CACHE_HIT: ${{ steps.playwright-cache.outputs.cache-hit }}
+        run: |
+          if [ "$CACHE_HIT" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
           sudo apt-get install -y ffmpeg
       - name: Check the release
         env:
@@ -48,17 +64,17 @@ jobs:
   publish:
     needs: verify
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: write   # create the GitHub release
       id-token: write   # npm trusted publishing and provenance
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org

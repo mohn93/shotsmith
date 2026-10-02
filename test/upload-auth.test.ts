@@ -126,9 +126,36 @@ describe("playTokenSource", () => {
     await expect(playTokenSource(key, transport)()).rejects.toThrow("Google sign-in returned no access token");
   });
 
-  it("explains a sign-in error that is not JSON", async () => {
-    const transport: Transport = async () => ({ status: 502, text: "<html>Bad Gateway</html>" });
-    await expect(playTokenSource(key, transport)()).rejects.toThrow(/Google rejected the service account key: .*Bad Gateway/);
+  it("reports a sign-in error that is not JSON as a failed sign-in, not a rejected key", async () => {
+    for (const status of [500, 502, 503]) {
+      const transport: Transport = async () => ({ status, text: "<html>Bad Gateway</html>" });
+      const failure = playTokenSource(key, transport)();
+      await expect(failure).rejects.toThrow(`Google sign-in failed (status ${status}): <html>Bad Gateway</html>`);
+      await expect(failure).rejects.not.toThrow(/rejected/);
+      await expect(failure).rejects.toBeInstanceOf(StoreError);
+    }
+  });
+
+  it("names a rejected key only when Google's JSON says why", async () => {
+    const answer = (body: object): Transport => async () => ({ status: 400, text: JSON.stringify(body) });
+    await expect(playTokenSource(key, answer({ error: "invalid_client" }))()).rejects.toThrow("Google rejected the service account key: invalid_client");
+    await expect(playTokenSource(key, answer({}))()).rejects.toThrow("Google sign-in failed (status 400)");
+  });
+
+  it("does not call a server error a rejected key even when its body is JSON", async () => {
+    const transport: Transport = async () => ({ status: 503, text: JSON.stringify({ error: "backend_error" }) });
+    const failure = playTokenSource(key, transport)();
+    await expect(failure).rejects.toThrow("Google sign-in failed (status 503): backend_error");
+    await expect(failure).rejects.not.toThrow(/rejected/);
+    const described = playTokenSource(key, async () => ({ status: 500, text: JSON.stringify({ error: "internal", error_description: "Try again later." }) }))();
+    await expect(described).rejects.toThrow("Google sign-in failed (status 500): Try again later.");
+  });
+
+  it("treats a JSON error body with a rawBody key as JSON", async () => {
+    const transport: Transport = async () => ({ status: 400, text: JSON.stringify({ rawBody: "from the key" }) });
+    const failure = playTokenSource(key, transport)();
+    await expect(failure).rejects.toThrow("Google sign-in failed (status 400)");
+    await expect(failure).rejects.not.toThrow(/from the key/);
   });
 
   it("explains a rejected key", async () => {

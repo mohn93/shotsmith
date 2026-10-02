@@ -23,10 +23,20 @@ function reasonOf(c: Reason | undefined): string {
   return c.message || c.code || (c.errors ?? []).map(reasonOf).find(Boolean) || "";
 }
 
+// The URL without its query string or fragment. A URL that does not parse is cut the same way, so the error that names
+// it is still raised.
+function callTarget(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return url.split(/[?#]/)[0];
+  }
+}
+
 // Names the call (without its query string) and the reason; fetch itself says only "fetch failed".
 function transportError(req: HttpRequest, e: unknown, timeoutMs: number): Error {
-  const u = new URL(req.url);
-  const call = `${req.method} ${u.origin}${u.pathname}`;
+  const call = `${req.method} ${callTarget(req.url)}`;
   const err = e as { name?: string; message?: string; cause?: Reason };
   const cause = reasonOf(err.cause) || err.message || String(e);
   if (err.name === "TimeoutError") return new Error(`${call} timed out after ${timeoutMs / 1000} s`);
@@ -60,14 +70,18 @@ export class StoreError extends Error {
 }
 
 // The body of a store answer. An error status may come with a body that is not JSON (a proxy's HTML page); it is
-// returned as { rawBody } with its first 200 characters, so the caller can still raise a StoreError.
+// returned with its first 200 characters under RAW_BODY, so the caller can still raise a StoreError. The key is a symbol,
+// which a JSON body cannot contain.
+const RAW_BODY = Symbol("rawBody");
+export const rawBodyOf = (data: Record<string, any>): string | undefined => (data as Record<symbol, string | undefined>)[RAW_BODY];
+
 export function parseBody(r: HttpResponse, from: string): Record<string, any> {
   if (r.status < 400) return parseJson(r.text, from);
   try {
     const data = parseJson(r.text, from);
     if (data !== null && typeof data === "object" && !Array.isArray(data)) return data;
   } catch {}
-  return { rawBody: r.text.slice(0, 200) };
+  return { [RAW_BODY]: r.text.slice(0, 200) };
 }
 
 // Store APIs answer JSON, or nothing (204).

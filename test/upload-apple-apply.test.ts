@@ -123,7 +123,27 @@ describe("applyApple", () => {
     expect(report.ok).toBe(false);
     expect(report.error).toMatch(/en-US APP_IPHONE_67: export\/en\/iphone-6\.9\/02-b\.jpg changed after the plan was made/);
     expect(fake.writes()).toEqual([]);
-    expect(report.sets[0]).toMatchObject({ status: "failed", deleted: [], uploaded: [] });
+    expect(report.sets).toEqual([]);
+  });
+
+  it("checks every export of every set before the first write, so a change in a later set writes nothing at all", async () => {
+    const { cfg, sets, fake, plan } = await planned();
+    await paint(cfg, "de", "iphone-6.9", "02-b", 5);
+    const report = await applyApple(cfg, sets, {}, plan, deps(fake));
+    expect(report.ok).toBe(false);
+    expect(report.error).toMatch(/de-DE APP_IPHONE_67: export\/de\/iphone-6\.9\/02-b\.jpg changed after the plan was made/);
+    expect(fake.writes()).toEqual([]);
+    expect(fake.checksums("loc-en", "APP_IPHONE_67")).toEqual([]);
+    expect(report.sets).toEqual([]);
+  });
+
+  it("does not check the exports of sets that are unchanged", async () => {
+    const { cfg, sets, fake, plan } = await planned((f, s) => { f.seed("loc-en", "APP_IPHONE_67", s[0].files.map((x) => ({ checksum: x.md5 }))); });
+    expect(plan.sets[0].status).toBe("unchanged");
+    await paint(cfg, "en", "iphone-6.9", "02-b", 5);
+    const report = await applyApple(cfg, sets, {}, plan, deps(fake));
+    expect(report.ok).toBe(true);
+    expect(report.sets.map((s) => s.status)).toEqual(["unchanged", "changed"]);
   });
 
   it.each([

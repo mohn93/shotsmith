@@ -30,6 +30,7 @@ describe("npm package", () => {
       "templates/init/shotsmith.config.json", "skills/store-screenshots/SKILL.md", "skills/store-screenshots/kit.md"]) {
       expect(files, f).toContain(f);
     }
+    expect([...new Set(files.map((f) => f.split("/")[0]))].sort()).toEqual(["LICENSE", "README.md", "dist", "package.json", "skills", "templates"]);
     expect(files.filter((f) => /^(src|test|examples|docs|scripts|release|\.superpowers|\.claude-plugin|\.github)\//.test(f))).toEqual([]);
     expect(info.size).toBeLessThan(5 * 1024 * 1024);
   });
