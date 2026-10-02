@@ -23,19 +23,22 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const git = spawn("git", ["log", "--all", "-p", "--format=commit %H"], { cwd: root });
   let commit = "", hits = 0, gitStderr = "";
+  const closed = new Promise((resolve) => {
+    git.on("close", resolve);
+    git.on("error", () => resolve(1));
+  });
   git.stderr.on("data", (chunk) => { gitStderr += chunk.toString(); });
   for await (const line of readline.createInterface({ input: git.stdout })) {
     if (line.startsWith("commit ")) { commit = line.slice(7, 19); continue; }
     if (!line.startsWith("+")) continue;
     for (const kind of findSecrets(line)) { console.log(`${commit} ${kind}`); hits++; }
   }
-  git.on("close", (code) => {
-    if (code !== 0) {
-      console.error(`git log failed (exit ${code}); the history was not scanned`);
-      if (gitStderr) console.error(gitStderr);
-      process.exit(2);
-    }
-    console.log(hits ? `${hits} possible secret(s) in history` : "No secrets found in history");
-    process.exit(hits ? 1 : 0);
-  });
+  const code = await closed;
+  if (code !== 0) {
+    console.error(`git log failed (exit ${code}); the history was not scanned`);
+    if (gitStderr) console.error(gitStderr);
+    process.exit(2);
+  }
+  console.log(hits ? `${hits} possible secret(s) in history` : "No secrets found in history");
+  process.exit(hits ? 1 : 0);
 }
