@@ -49,3 +49,4 @@ gh release create v<x.y.z> release/store-screenshots-<x.y.z>.zip --title "Shotsm
 
 | Version | Date | Apps | Corrections | Traps caught | Time | Tokens | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.1.0 | 2026-10-02 | not run | - | - | - | - | First release; the examples were ported from the trial run before the CLI existed. Run the trial before 0.2.0. |
