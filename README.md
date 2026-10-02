@@ -13,7 +13,7 @@ npx playwright install chromium   # once per machine; on Linux: npx playwright i
 npx shotsmith build
 ```
 
-`init` creates the workspace and installs a pinned shotsmith into it. Video drafts (`render --video`) also need `ffmpeg` on the PATH.
+`init` creates the workspace and installs shotsmith (`^<version>`, the version you ran) into it. Video drafts (`render --video`) also need `ffmpeg` on the PATH.
 
 The agent skill (`skills/store-screenshots`) drives the whole flow: taste, claims, brief, pages, review, build.
 

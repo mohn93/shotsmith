@@ -18,7 +18,9 @@ describe("skill content", () => {
 
   it("pins this package's version wherever it names shotsmith@", () => {
     const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
-    const pins = DOCS.map(read).join("\n").match(/shotsmith@[\w.-]+/g) ?? [];
+    const docsText = DOCS.map(read).join("\n");
+    const readmeText = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+    const pins = (docsText + "\n" + readmeText).match(/shotsmith@\d+[\w.-]*/g) ?? [];
     expect(pins.length).toBeGreaterThan(0);
     expect([...new Set(pins)]).toEqual([`shotsmith@${version}`]);
   });

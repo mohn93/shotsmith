@@ -23,7 +23,7 @@ A version tag on `main` runs `.github/workflows/release.yml`. That workflow:
 1. **Skill quality, before each minor release.** Rerun the three-app agent trial with the skill and CLI being released. Record it in the trial record below.
 2. **Bump the version.**
    - Set the new version in `package.json` (`npm version <x.y.z> --no-git-tag-version`), `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
-   - Set the same version in every `shotsmith@<version>` in `skills/store-screenshots/`; the skill-content test checks this.
+   - Set the same version in every `shotsmith@<version>` in `skills/store-screenshots/` and README.md; the skill-content test checks this.
    - Add a `## <x.y.z>` section to `CHANGELOG.md`.
 3. **Check it.** Run `npm test` and `node scripts/check-release.mjs`, which prints `Ready to release <x.y.z> (dry run)`. Merge into `dev` through a pull request with CI green.
 4. **Dry-run the release workflow.** Actions, then Release, then Run workflow on `dev` with dry-run on. It must pass.
