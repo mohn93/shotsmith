@@ -71,6 +71,11 @@ describe("check-release", () => {
     const fail = () => checkRelease(malformed);
     expect(fail).toThrow(/marketplace\.json is missing or not valid JSON/);
     expect(fail).not.toThrow(SyntaxError);
+    for (const content of ["null", "42", "[]", '"1.2.3"']) {
+      const notObject = releaseRoot();
+      fs.writeFileSync(path.join(notObject, ".claude-plugin/plugin.json"), content);
+      expect(() => checkRelease(notObject), content).toThrow(/Not ready to release:\n- \.claude-plugin\/plugin\.json is missing or not valid JSON/);
+    }
     const noPackage = releaseRoot();
     fs.rmSync(path.join(noPackage, "package.json"));
     expect(() => checkRelease(noPackage)).toThrow(/package\.json is missing or not valid JSON/);

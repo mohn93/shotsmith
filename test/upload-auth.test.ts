@@ -142,6 +142,15 @@ describe("playTokenSource", () => {
     await expect(playTokenSource(key, answer({}))()).rejects.toThrow("Google sign-in failed (status 400)");
   });
 
+  it("does not call a server error a rejected key even when its body is JSON", async () => {
+    const transport: Transport = async () => ({ status: 503, text: JSON.stringify({ error: "backend_error" }) });
+    const failure = playTokenSource(key, transport)();
+    await expect(failure).rejects.toThrow("Google sign-in failed (status 503): backend_error");
+    await expect(failure).rejects.not.toThrow(/rejected/);
+    const described = playTokenSource(key, async () => ({ status: 500, text: JSON.stringify({ error: "internal", error_description: "Try again later." }) }))();
+    await expect(described).rejects.toThrow("Google sign-in failed (status 500): Try again later.");
+  });
+
   it("treats a JSON error body with a rawBody key as JSON", async () => {
     const transport: Transport = async () => ({ status: 400, text: JSON.stringify({ rawBody: "from the key" }) });
     const failure = playTokenSource(key, transport)();

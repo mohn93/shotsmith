@@ -34,9 +34,12 @@ export function playTokenSource(key: PlayKey, transport: Transport, now: () => n
     });
     const data = parseBody(r, "Google sign-in");
     if (r.status !== 200) {
-      // Only Google's JSON error says the key was refused; a proxy's page or a server error does not.
+      // Only Google's JSON error below 500 says the key was refused; a proxy's page or a server error does not.
       const why = data.error_description ?? data.error;
-      if (typeof why === "string") throw new StoreError(`Google rejected the service account key: ${why}`, r.status);
+      if (typeof why === "string") {
+        if (r.status < 500) throw new StoreError(`Google rejected the service account key: ${why}`, r.status);
+        throw new StoreError(`Google sign-in failed (status ${r.status}): ${why}`, r.status);
+      }
       const body = rawBodyOf(data);
       throw new StoreError(`Google sign-in failed (status ${r.status})${body ? `: ${body}` : ""}`, r.status);
     }

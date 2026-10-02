@@ -7,10 +7,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-// Reads a JSON file; a missing or malformed one is recorded as a problem and gives null.
+// Reads a JSON object file; a missing, malformed or non-object one is recorded as a problem and gives null.
 function readJson(root, file, problems) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
+    const data = JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
+    if (data === null || typeof data !== "object" || Array.isArray(data)) throw new Error("not a JSON object");
+    return data;
   } catch {
     problems.push(`${file} is missing or not valid JSON`);
     return null;
