@@ -103,6 +103,6 @@ describe("skill content", () => {
     expect(readme).toMatch(/npx shotsmith@\d+\.\d+\.\d+ init/);
     expect(readme).toContain("RELEASE.md");
     const release = fs.readFileSync(path.join(ROOT, "RELEASE.md"), "utf8");
-    for (const s of ["Trusted Publisher", "release.yml", "check-release", "pack-skill", "three-app", "## Trial record"]) expect(release, s).toContain(s);
+    for (const s of ["trust list shotsmith", "release.yml", "check-release", "pack-skill", "three-app", "## Trial record"]) expect(release, s).toContain(s);
   });
 });
