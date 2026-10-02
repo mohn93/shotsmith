@@ -88,4 +88,10 @@ describe("skill content", () => {
     expect(targets).toContain('"apple": { "bundleId" }');
     expect(targets).toContain('"play": { "packageName" }');
   });
+
+  it("tells an agent without a shell what to hand over instead of renders", () => {
+    const skill = read("SKILL.md");
+    expect(skill).toMatch(/^## Without a shell or Node/m);
+    expect(skill).toMatch(/do not describe renders you have not seen/i);
+  });
 });
